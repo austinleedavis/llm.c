@@ -10,21 +10,20 @@ example game to highlight the structure of the dataset:
 }
 
 Example of downloading the June 2023 moves dataset of Lichess UCI, from root directory:
-python dev/data/lichess_uci.py -f -v 202306-moves 202305-moves 
+python dev/data/lichess_uci.py -f -v 201302-moves 201303-moves 
 The larger datasets run for small few hours, depending on your internet and computer.
 """
-import os
 import argparse
 import multiprocessing as mp
+import os
 
 import numpy as np
-from datasets import load_dataset, concatenate_datasets, Dataset
+from data_common import write_datafile
+from datasets import Dataset, concatenate_datasets, load_dataset
+from lichess_uci_dates import VALID_LICHESS_MONTHS, encode_list
 from tqdm import tqdm
-
-from lichess_uci_dates import VALID_LICHESS_MONTHS
 from uci_tokenizers import UciTileTokenizer
 
-from data_common import write_datafile
 # ------------------------------------------
 
 parser = argparse.ArgumentParser(description="Lichess UCI dataset preprocessing")
@@ -37,11 +36,10 @@ args = parser.parse_args()
 # The Lichess UCI dataset has many possible subsamples available
 assert all(v in VALID_LICHESS_MONTHS for v in args.version), f"Version must be one of:\n{VALID_LICHESS_MONTHS}"
 
-# Convert the `args.version` list to a binary integer representation
-version_int = sum(1 << i for i, month in enumerate(VALID_LICHESS_MONTHS) if month in args.version)
-version_hex = hex(version_int)
+# Convert the `args.version` list to a invertable string representation
+version_encoding = encode_list(args.version)
 
-local_dir = os.path.join('lichess_uci', version_hex) 
+local_dir = os.path.join('lichess_uci', version_encoding) 
 
 
 # create the cache the local directory if it doesn't exist yet
@@ -50,7 +48,8 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 dataset_parts = []
 for remote_name in args.version: 
-    ds_subset = load_dataset("austindavis/lichess_uci", name=remote_name, split="train")
+    print(f"Load {remote_name}")
+    ds_subset = load_dataset("austindavis/lichess_uci", name=remote_name, split="train", streaming=True)
     
     if args.filtered:
         #filter the datset to only those transcripts that include a promotion token
@@ -59,7 +58,7 @@ for remote_name in args.version:
 
     dataset_parts.append(filtered_subset)
 
-lichess_uci: Dataset = concatenate_datasets(filteredataset_partsd_datasets)
+lichess_uci: Dataset = concatenate_datasets(dataset_parts)
 name = "lichess_uci"
 
 
