@@ -22,7 +22,7 @@ from datasets import load_dataset, concatenate_datasets, Dataset
 from tqdm import tqdm
 
 from lichess_uci_dates import VALID_LICHESS_MONTHS
-from uci_tokenizer import UciTileTokenizer
+from uci_tokenizers import UciTileTokenizer
 
 from data_common import write_datafile
 # ------------------------------------------
