@@ -10,7 +10,7 @@ example game to highlight the structure of the dataset:
 }
 
 Example of downloading the June 2023 moves dataset of Lichess UCI, from root directory:
-python dev/data/lichess_uci.py -v 202306-moves
+python dev/data/lichess_uci.py -f -v 202306-moves 202305-moves 
 The larger datasets run for small few hours, depending on your internet and computer.
 """
 import os
@@ -18,7 +18,7 @@ import argparse
 import multiprocessing as mp
 
 import numpy as np
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets, Dataset
 from tqdm import tqdm
 
 from lichess_uci_dates import VALID_LICHESS_MONTHS
@@ -27,24 +27,39 @@ from uci_tokenizer import UciTileTokenizer
 from data_common import write_datafile
 # ------------------------------------------
 
-parser = argparse.ArgumentParser(description="FineWeb and Edu-FineWeb dataset preprocessing")
-parser.add_argument("-v", "--version", type=str, default="202306-moves", help="Lichess UCI month")
+parser = argparse.ArgumentParser(description="Lichess UCI dataset preprocessing")
+parser.add_argument("-v", "--version", type=str, nargs='+', default=["202306-moves"], help="Lichess UCI month(s). Provide multiple months separated by space.")
+parser.add_argument("-f", "--filtered", action='store_true', help="Filter dataset to only transcript with promotion tokens.")
 parser.add_argument("-m", "--model_desc", type=str, default="gpt-2", help="Model descriptor, gpt-2|llama-3")
-parser.add_argument("-s", "--shard_size", type=int, default=10**8, help="Size of each data shard in the output .bin files, in tokens")
+parser.add_argument("-s", "--shard_size", type=int, default=10**7, help="Size of each data shard in the output .bin files, in tokens")
 args = parser.parse_args()
 
 # The Lichess UCI dataset has many possible subsamples available
-assert args.version in VALID_LICHESS_MONTHS, f"Version must be one of:\n{VALID_LICHESS_MONTHS}"
+assert all(v in VALID_LICHESS_MONTHS for v in args.version), f"Version must be one of:\n{VALID_LICHESS_MONTHS}"
 
-local_dir = os.join('lichess_uci',args.version)
-remote_name = args.version
+# Convert the `args.version` list to a binary integer representation
+version_int = sum(1 << i for i, month in enumerate(VALID_LICHESS_MONTHS) if month in args.version)
+version_hex = hex(version_int)
+
+local_dir = os.join('lichess_uci', version_hex) 
+
 
 # create the cache the local directory if it doesn't exist yet
 DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
 os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
-# download the dataset
-lichess_uci = load_dataset("austindavis/lichess_uci", name=remote_name, split="train")
+dataset_parts = []
+for remote_name in args.version: 
+    ds_subset = load_dataset("austindavis/lichess_uci", name=remote_name, split="train")
+    
+    if args.filtered:
+        #filter the datset to only those transcripts that include a promotion token
+        # a space exists after the bishop's `b` to disambiguate from the `b`` file
+        filtered_subset = ds.filter(lambda x: any(p in x['transcript'].lower() for p in ['q','n','b ','r']))
+
+    dataset_parts.append(filtered_subset)
+
+lichess_uci: Dataset = concatenate_datasets(filteredataset_partsd_datasets)
 name = "lichess_uci"
 
 
