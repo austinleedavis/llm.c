@@ -55,7 +55,7 @@ for remote_name in args.version:
     if args.filtered:
         #filter the datset to only those transcripts that include a promotion token
         # a space exists after the bishop's `b` to disambiguate from the `b`` file
-        filtered_subset = ds.filter(lambda x: any(p in x['transcript'].lower() for p in ['q','n','b ','r']))
+        filtered_subset = ds_subset.filter(lambda x: any(p in x['transcript'].lower() for p in ['q','n','b ','r']))
 
     dataset_parts.append(filtered_subset)
 
