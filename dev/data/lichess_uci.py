@@ -41,7 +41,7 @@ assert all(v in VALID_LICHESS_MONTHS for v in args.version), f"Version must be o
 version_int = sum(1 << i for i, month in enumerate(VALID_LICHESS_MONTHS) if month in args.version)
 version_hex = hex(version_int)
 
-local_dir = os.join('lichess_uci', version_hex) 
+local_dir = os.path.join('lichess_uci', version_hex) 
 
 
 # create the cache the local directory if it doesn't exist yet
