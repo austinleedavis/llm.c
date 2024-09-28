@@ -424,6 +424,7 @@ class UciTileTokenizer(UciTokenizerBase):
             bos_token="<s>",
             eos_token="</s>",
             name_or_path="austindavis/uci_tile_tokenizer",
+            clean_up_tokenization_spaces=False,
             **kwargs,
         )
 
