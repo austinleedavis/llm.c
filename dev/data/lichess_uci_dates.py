@@ -1,3 +1,5 @@
+import math
+
 VALID_LICHESS_MONTHS=[
     "201301-moves",
     "201302-moves",
@@ -134,3 +136,36 @@ VALID_LICHESS_MONTHS=[
     "202401-moves",
     "202402-moves",
 ]
+
+def encode_list(subset: list[str], superset: list[str] = VALID_LICHESS_MONTHS, alphabet: str ='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-'):
+    N = len(alphabet)
+    step = int(math.log(N,2))
+
+    set_containment = ['1' if v in subset else '0' for v in superset]
+    
+    encoded_str = ""
+
+    # encode using the alphabet
+    for i in range(0,len(set_containment),step):
+        # Reverse so we can easily decode
+        binary_str = '0b'+''.join(reversed(set_containment[i:i+step]))
+        alphabet_index = int(binary_str,2)
+        encoded_str += alphabet[alphabet_index]
+
+    return encoded_str
+
+def decode_list(encoded_str: str, superset: list[str] = VALID_LICHESS_MONTHS, alphabet: str ='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-'):
+    N = len(alphabet)
+    base = int(math.log(N,2))
+
+    char_map = {k:bin(i)[2:].zfill(base)[::-1] for i,k in enumerate(list(alphabet))}
+
+    decoded_str = ''
+    for c in encoded_str:
+        decoded_str += char_map[c]
+
+    decoded_list = []
+    for i, val in enumerate(list(decoded_str)):
+        if val == '1':
+            decoded_list.append(superset[i])
+    return decoded_list
