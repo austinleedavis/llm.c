@@ -2,7 +2,7 @@ from typing import List
 
 import chess
 import tokenizers
-from tokenizers import models, pre_tokenizers, processors
+from tokenizers import models, normalizers, pre_tokenizers, processors
 from torch import Tensor as TT
 from transformers import PreTrainedTokenizerFast
 
@@ -20,6 +20,12 @@ class UciTokenizerBase(PreTrainedTokenizerFast):
 
     itos: dict[int, str]
     """String to Integer Mapping. This is the vocab"""
+
+    max_token_value: int
+    """"""
+
+    eot_token: int
+    """end of text token is the same as EOS tokens"""
 
     def __init__(
         self,
@@ -40,11 +46,12 @@ class UciTokenizerBase(PreTrainedTokenizerFast):
         self._EOS_TOKEN = eos_token
         self._BOS_TOKEN = bos_token
 
-        # Define the model
+        # Define the tokenizer model
         tok_model = models.WordLevel(vocab=self.stoi, unk_token=self._UNK_TOKEN)
 
         slow_tokenizer = tokenizers.Tokenizer(tok_model)
         slow_tokenizer.pre_tokenizer = self._init_pretokenizer()
+        slow_tokenizer.normalizer = normalizers.Lowercase()
 
         # post processing adds special tokens unless explicitly ignored
         post_proc = processors.TemplateProcessing(
@@ -84,9 +91,17 @@ class UciTokenizerBase(PreTrainedTokenizerFast):
                 tokens_str = [self.itos.get(xi, self._UNK_TOKEN) for xi in token_ids]
                 moves = self._process_str_tokens(tokens_str)
 
-                return " ".join(moves)
+                return " ".join(moves)#.strip()
 
         self._decode = _decode
+
+        self.eot_token = self.stoi[self.eos_token]
+
+        self.max_token_value = len(self.stoi.items())
+
+    def decode_bytes(self, tokens: list[int]) -> bytes:
+        """decodes a list of tokens into bytes"""
+        return str.encode(self.decode(tokens))
 
     def _init_pretokenizer(self) -> pre_tokenizers.PreTokenizer:
         raise NotImplementedError
@@ -420,9 +435,9 @@ class UciTileTokenizer(UciTokenizerBase):
             self.stoi,
             self.itos,
             pad_token="<pad>",
-            unk_token="<unk>",
             bos_token="<s>",
             eos_token="</s>",
+            unk_token="<unk>",
             name_or_path="austindavis/uci_tile_tokenizer",
             clean_up_tokenization_spaces=False,
             **kwargs,
@@ -433,26 +448,28 @@ class UciTileTokenizer(UciTokenizerBase):
         pattern = tokenizers.Regex(r"\d")
         pre_tokenizer = pre_tokenizers.Sequence(
             [
+                
                 pre_tokenizers.Whitespace(),
                 pre_tokenizers.Split(pattern=pattern, behavior="merged_with_previous"),
             ]
         )
         return pre_tokenizer
 
-    def _process_str_tokens(self, token_str):
+    def _process_str_tokens(self, tokens_str: list[str]) -> list[str]:
         moves = []
         next_move = ""
-        for token in token_str:
+        for token in tokens_str:
 
-            # skip special tokens
+            # don't skip special tokens
             if token in self.all_special_tokens:
-                continue
-
-            # handle promotions
-            if len(token) == 1:
                 moves.append(next_move + token)
+                next_move = ""
                 continue
-
+            # handle promotions
+            if token in list("qrbn"):
+                moves.append(next_move + token)
+                next_move = ""
+                continue
             # handle regular tokens
             if len(next_move) == 4:
                 moves.append(next_move)

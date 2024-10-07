@@ -2,9 +2,9 @@
 Common utilities for the datasets
 """
 
+import numpy as np
 import requests
 from tqdm import tqdm
-import numpy as np
 
 
 def download_file(url: str, fname: str, chunk_size=1024):
@@ -54,7 +54,7 @@ def write_datafile(filename, toks, model_desc="gpt-2"):
     toks_np = np.array(toks, dtype=info["token_dtype"])
     # write to file
     num_bytes = (256 * 4) + (len(toks) * toks_np.itemsize)
-    print(f"writing {len(toks):,} tokens to {filename} ({num_bytes:,} bytes) in the {model_desc} format")
+    # print(f"writing {len(toks):,} tokens to {filename} ({num_bytes:,} bytes) in the {model_desc} format")
     with open(filename, "wb") as f:
         f.write(header.tobytes())
         f.write(toks_np.tobytes())

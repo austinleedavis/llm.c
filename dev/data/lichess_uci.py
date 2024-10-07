@@ -19,7 +19,7 @@ import os
 
 import numpy as np
 from data_common import write_datafile
-from datasets import Dataset, concatenate_datasets, load_dataset
+from datasets import IterableDataset, concatenate_datasets, load_dataset
 from lichess_uci_dates import VALID_LICHESS_MONTHS, encode_list
 from tqdm import tqdm
 from uci_tokenizers import UciTileTokenizer
@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(description="Lichess UCI dataset preprocessing"
 parser.add_argument("-v", "--version", type=str, nargs='+', default=["202306-moves"], help="Lichess UCI month(s). Provide multiple months separated by space.")
 parser.add_argument("-f", "--filtered", action='store_true', help="Filter dataset to only transcript with promotion tokens.")
 parser.add_argument("-m", "--model_desc", type=str, default="gpt-2", help="Model descriptor, gpt-2|llama-3")
-parser.add_argument("-s", "--shard_size", type=int, default=10**7, help="Size of each data shard in the output .bin files, in tokens")
+parser.add_argument("-s", "--shard_size", type=int, default=10**8, help="Size of each data shard in the output .bin files, in tokens")
 args = parser.parse_args()
 
 # The Lichess UCI dataset has many possible subsamples available
@@ -58,7 +58,7 @@ for remote_name in args.version:
 
     dataset_parts.append(filtered_subset)
 
-lichess_uci: Dataset = concatenate_datasets(dataset_parts)
+lichess_uci: IterableDataset = concatenate_datasets(dataset_parts)
 name = "lichess_uci"
 
 
@@ -71,8 +71,9 @@ def tokenize_uci(game):
     tokens_np_uint = tokens_np.astype(np.uint16)
     return tokens_np_uint
 
-
 token_dtype = np.uint16
+
+print(f"Output will be saved to: {DATA_CACHE_DIR}")
 
 # tokenize all documents and write output shards, each of shard_size tokens (last shard has remainder)
 nprocs = max(1, os.cpu_count() - 2) # don't hog the entire system
@@ -81,32 +82,40 @@ with mp.Pool(nprocs) as pool:
     # preallocate buffer to hold current shard
     all_tokens_np = np.empty((args.shard_size,), dtype=token_dtype)
     token_count = 0
-    progress_bar = None
+    inner_progress_bar = None
 
+    
     tokenize = tokenize_uci
+    i = 0
+    running_total = 0
+    for tokens in tqdm(pool.imap_unordered(tokenize, lichess_uci, chunksize=64)):
+        i += 1
 
-    for tokens in pool.imap(tokenize, lichess_uci, chunksize=16):
-
+        # if i > 200:
+        #     running_total += i
+        #     i = 0
+        #     print(f"Running Total: {running_total}")
+        
         # is there enough space in the current shard for the new tokens?
         if token_count + len(tokens) < args.shard_size:
             # simply append tokens to current shard
             all_tokens_np[token_count:token_count+len(tokens)] = tokens
             token_count += len(tokens)
             # update progress bar
-            if progress_bar is None:
-                progress_bar = tqdm(total=args.shard_size, unit="tokens", desc=f"Shard {shard_index}")
-            progress_bar.update(len(tokens))
+            if inner_progress_bar is None:
+                inner_progress_bar = tqdm(total=args.shard_size, unit="tokens", desc=f"Shard {shard_index}",leave=False)
+            inner_progress_bar.update(len(tokens))
         else:
             # write the current shard and start a new one
             split = "val" if shard_index == 0 else "train"
             filename = os.path.join(DATA_CACHE_DIR, f"{name}_{split}_{shard_index:06d}.bin")
             # split the document into whatever fits in this shard; the remainder goes to next one
             remainder = args.shard_size - token_count
-            progress_bar.update(remainder)
+            inner_progress_bar.update(remainder)
             all_tokens_np[token_count:token_count+remainder] = tokens[:remainder]
             write_datafile(filename, all_tokens_np.tolist(), args.model_desc)
             shard_index += 1
-            progress_bar = None
+            inner_progress_bar = None
             # populate the next shard with the leftovers of the current doc
             all_tokens_np[0:len(tokens)-remainder] = tokens[remainder:]
             token_count = len(tokens)-remainder

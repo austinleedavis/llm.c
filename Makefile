@@ -112,9 +112,9 @@ endif
 # Refer to the README for cuDNN install instructions
 ifeq ($(USE_CUDNN), 1)
   ifeq ($(SHELL_UNAME), Linux)
-    ifeq ($(shell [ -d $(HOME)/cudnn-frontend/include ] && echo "exists"), exists)
+    ifeq ($(shell [ -d $(HOME)/git/cudnn-frontend/include ] && echo "exists"), exists)
       $(info ✓ cuDNN found, will run with flash-attention)
-      CUDNN_FRONTEND_PATH ?= $(HOME)/cudnn-frontend/include
+      CUDNN_FRONTEND_PATH ?= $(HOME)/git/cudnn-frontend/include
     else ifeq ($(shell [ -d cudnn-frontend/include ] && echo "exists"), exists)
       $(info ✓ cuDNN found, will run with flash-attention)
       CUDNN_FRONTEND_PATH ?= cudnn-frontend/include
@@ -215,6 +215,7 @@ endif
 
 # Attempt to find and include OpenMPI on the system
 OPENMPI_DIR ?= /usr/lib/x86_64-linux-gnu/openmpi
+# OPENMPI_DIR ?= $(dirname $(dirname $(which mpirun)))
 OPENMPI_LIB_PATH = $(OPENMPI_DIR)/lib/
 OPENMPI_INCLUDE_PATH = $(OPENMPI_DIR)/include/
 ifeq ($(NO_USE_MPI), 1)
@@ -244,7 +245,7 @@ else
 endif
 
 # PHONY means these targets will always be executed
-.PHONY: all train_gpt2 test_gpt2 train_gpt2cu test_gpt2cu train_gpt2fp32cu test_gpt2fp32cu profile_gpt2cu
+.PHONY: all train_chesscu train_gpt2 test_gpt2 train_gpt2cu test_gpt2cu train_gpt2fp32cu test_gpt2fp32cu profile_gpt2cu
 
 # Add targets
 TARGETS = train_gpt2 test_gpt2
@@ -254,12 +255,15 @@ ifeq ($(NVCC),)
     $(info ✗ nvcc not found, skipping GPU/CUDA builds)
 else
     $(info ✓ nvcc found, including GPU/CUDA support)
-    TARGETS += train_gpt2cu test_gpt2cu train_gpt2fp32cu test_gpt2fp32cu $(NVCC_CUDNN)
+    TARGETS += train_chesscu train_gpt2cu test_gpt2cu train_gpt2fp32cu test_gpt2fp32cu $(NVCC_CUDNN)
 endif
 
 $(info ---------------------------------------------)
 
 all: $(TARGETS)
+
+train_chesscu: train_chess.cu $(NVCC_CUDNN)
+	$(NVCC) $(NVCC_FLAGS) $(PFLAGS) $^ $(NVCC_LDFLAGS) $(NVCC_INCLUDES) $(NVCC_LDLIBS) $(CUDA_OUTPUT_FILE)
 
 train_gpt2: train_gpt2.c
 	$(CC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) $^ $(LDLIBS) $(OUTPUT_FILE)
