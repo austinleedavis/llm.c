@@ -365,10 +365,10 @@ void gpt2_allocate_weights(GPT2 *model) {
 }
 
 void gpt2_allocate_state(GPT2 *model, int B, int T) {
-    printf0("allocating %d MiB for parameter gradients\n", (int)round(model->num_parameters * sizeof(floatX) / (1024 * 1024)));
+    printf0("allocating %d MiB for parameter gradients\n", (int)round(model->num_parameters * sizeof(floatX) / (512 * 512)));
     assert(model->grads_memory == nullptr);
     model->grads_memory = malloc_and_point_parameters(&model->grads, model->param_elements, model->param_sizeof);
-
+    
     // record the current B,T as well
     model->batch_size = B;
     model->seq_len = T;
@@ -533,7 +533,7 @@ void gpt2_set_hyperparameters(GPT2Config* config, const char* depth_str) {
     config->num_layers = depth;
     config->channels = channels;
     config->num_heads = num_heads;
-    config->max_seq_len = 512;
+    config->max_seq_len = 1024;
 }
 
 void gpt3_set_hyperparameters(GPT2Config* config, const char* channels_str) {
@@ -577,10 +577,10 @@ void gpt_build_from_descriptor(GPT2 *model, const char* descriptor) {
     } else if (len > 6 && strncmp(descriptor, "gpt3:c", 6) == 0) {
         gpt3_set_hyperparameters(&model->config, descriptor + 6); // pass along the channels str without the 'gpt3:c'
     } else if (len >= 3 && strncmp(descriptor, "austindavis", 11) == 0 && strcmp(&descriptor[len-3], "512") == 0) {
-        fprintf(stderr," Using model %s\n", descriptor);
+        // fprintf(stderr," Using model %s\n", descriptor);
         gpt2_set_hyperparameters(&model->config, "8");
     } else if (len >= 3  && strncmp(descriptor, "austindavis", 11) == 0 && strcmp(&descriptor[len-3], "768") == 0) {
-        fprintf(stderr," Using model %s\n", descriptor);
+        // fprintf(stderr," Using model %s\n", descriptor);
         gpt2_set_hyperparameters(&model->config, "12");
     } else {
         fprintf(stderr, "Unsupported model descriptor: %s\n", descriptor); exit(EXIT_FAILURE);
@@ -768,6 +768,7 @@ void gpt2_forward(GPT2 *model, const int* inputs, size_t B, size_t T) {
 // Some of the evals (e.g. HellaSwag) require the per-token losses, which are produced here.
 float gpt2_validate(GPT2 *model, const int* inputs, const int* targets, size_t B, size_t T) {
     assert(targets != NULL);
+
     // forward the model itself
     gpt2_forward(model, inputs, B, T);
     // convenience shortcuts, size_t instead of int so that pointer arithmetics don't overflow
@@ -784,8 +785,12 @@ float gpt2_validate(GPT2 *model, const int* inputs, const int* targets, size_t B
     cudaCheck(cudaMemcpy(model->targets, targets, B * T * sizeof(int), cudaMemcpyHostToDevice));
     tokenCheck(targets, B*T, V); // while the memcpy is underway, validate the targets
     fused_classifier(acts.output, acts.losses, dloss, model->targets, B, T, V, Vp, False, main_stream);
-    cudaCheck(cudaMemcpy(model->cpu_losses, acts.losses, B * T * sizeof(float), cudaMemcpyDeviceToHost));
+    fprintf(stdout, "    788   gpt2_validate  B, T: %lu %lu\n", B, T);
+    cudaStreamSynchronize(main_stream);  // Ensure the classifier execution is complete
+    fprintf(stdout, "    790   gpt2_validate  B, T: %lu %lu\n", B, T);
+    cudaCheck(cudaMemcpy(model->cpu_losses, acts.losses, B*T*sizeof(float), cudaMemcpyDeviceToHost));
     for (int i = 0; i < B*T; i++) {
+        fprintf(stdout, " %d", i);
         mean_loss += model->cpu_losses[i];
     }
     mean_loss /= B*T;
@@ -1611,6 +1616,8 @@ int main(int argc, char *argv[]) {
     DataLoader train_loader, val_loader;
     dataloader_init(&train_loader, train_data_pattern, B, T, multi_gpu_config.process_rank, multi_gpu_config.num_processes, permute_train_loader);
     dataloader_init(&val_loader, val_data_pattern, B, T, multi_gpu_config.process_rank, multi_gpu_config.num_processes, 0);
+    fprintf(stdout, "current_sample_idx: %lu\n", val_loader.current_sample_idx);
+    fprintf(stdout, "shard_num_samples: %lu\n", val_loader.shard_num_samples);
     // figure out the number of training steps we will run for
     int train_num_batches = max_steps; // passed in from command line
     if (train_num_batches == -1) {
@@ -1718,17 +1725,25 @@ int main(int argc, char *argv[]) {
     double total_sum_iteration_time_s = 0.0;
     float ema_tokens_per_second = 0.0f;
     for (; step <= train_num_batches; step++) {
+
+        fprintf(stdout,"Train step: %d\n", step);
+
         NvtxRange step_range("Train step", step);
 
         int last_step = step == train_num_batches;
 
         // once in a while estimate the validation loss (all processes collaborate)
         if (step % val_loss_every == 0 || last_step) {
+            fprintf(stdout,"  Doing Validating\n");
             NvtxRange validation_range("validation");
             float val_loss = 0.0f;
             dataloader_reset(&val_loader);
             for (int i = 0; i < val_num_batches; i++) {
+                fprintf(stdout, "    Validation Batch %d of %d\n",i, val_num_batches);
+                fprintf(stdout, "      current_sample_idx: %lu\n", val_loader.current_sample_idx);
+                fprintf(stdout, "      shard_num_samples: %lu\n", val_loader.shard_num_samples);
                 dataloader_next_batch(&val_loader);
+                fprintf(stdout, "      !!B, T: %d %d\n", B, T);
                 val_loss += gpt2_validate(&model, val_loader.inputs, val_loader.targets, B, T);
             }
             val_loss /= val_num_batches;
@@ -1740,6 +1755,7 @@ int main(int argc, char *argv[]) {
         // once in a while estimate HellaSwag accuracy (all processes collaborate)
         if (run_hellaswag &&
            ((step > 0 && step % val_loss_every == 0) || last_step)) {
+            fprintf(stdout,"  Doing HellaSwag\n");
             NvtxRange evaluation_range("evaluation");
             float eval_acc_norm = 0.0f;
             evalloader_reset(&eval_loader);
@@ -1759,6 +1775,7 @@ int main(int argc, char *argv[]) {
         // once in a while do model inference to print generated text (only rank 0)
         if (multi_gpu_config.process_rank == 0 && sample_every > 0 &&
            (step > 0 && (step % sample_every) == 0 || last_step)) {
+            fprintf(stdout,"  Doing Inference\n");
             NvtxRange generation_range("generation");
             unsigned long long sample_rng_state = 1337;
             // fill up gen_tokens with the <|endoftext|> token, which kicks off the generation
@@ -1806,6 +1823,7 @@ int main(int argc, char *argv[]) {
         // once in a while checkpoint the optimization state (all ranks)
         if ((checkpoint_every > 0 && output_log_dir != NULL && resuming == 0) &&
             ((step > 0 && step % checkpoint_every == 0) || last_step)) {
+            fprintf(stdout,"  Saving Checkpoint\n");
             // writes model .bin file, state .bin files, and DONE file for step
             write_checkpoint(output_log_dir, step, &model, &train_loader, &multi_gpu_config);
             // we only keep checkpoints_keep checkpoints on disk to save space

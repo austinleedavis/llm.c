@@ -24,10 +24,12 @@ done_file="$out_dir/DONE_00018865"
                 -i "dev/data/lichess_uci/00000000000000000010000/lichess_uci_train_*.bin" \
                 -j "dev/data/lichess_uci/00000000000000000010000/lichess_uci_val_*.bin" \
                 -o $out_dir \
-                -v 250 -s 20000 -g 144 \
+                -v 250 \
+                -s 20000 \
+                -g 144 \
                 -h 0 \
                 -b 4 \
-                -t 512 \
+                -t 1024 \
                 -d 524288 \
                 -r 0 \
                 -z 1 \
@@ -37,7 +39,9 @@ done_file="$out_dir/DONE_00018865"
                 -u 700 \
                 -n 5000 \
                 -y 1 \
-                -e "austindavis/chess-gpt2-uci-12x12x768"
+                -e "gpt2:d12"
+
+                # -e "austindavis/chess-gpt2-uci-12x12x768"
 
     sleep 1
 # done
