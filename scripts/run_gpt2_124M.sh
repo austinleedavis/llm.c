@@ -17,16 +17,26 @@ while true; do
         echo "File $done_file exists. Exiting the loop."
         break
     fi
+    # Notes on data prep:
+    # - run python dev/data/fineweb.py -t edu to prepare data
+    # - I limited the download to the first few by first downloading
+    #   the README and several of the parquet files. Then I edited the
+    #   README to add a new configuration called 'subsample' that 
+    #   included only the parquet files that I had already downloaded. 
 
-    # run python dev/data/fineweb.py --version 10B to prepro data
     # run python dev/data/hellaswag.py to prepro hellaswag eval
-    mpirun -np 8 ./train_gpt2cu \
+
+    # Notes on parameters: 
+    # d % (b*t) must equal zero
+    # RTX 3060 mobile can handle b=8, t=1024, d=524288
+    # Set n=100 to checkpoint model in case of crash
+    mpirun -np 1 ./train_gpt2cu \
                 -i "dev/data/fineweb10B/fineweb_train_*.bin" \
                 -j "dev/data/fineweb10B/fineweb_val_*.bin" \
                 -o $out_dir \
                 -v 250 -s 20000 -g 144 \
                 -h 1 \
-                -b 64 -t 1024 \
+                -b 8 -t 1024 \
                 -d 524288 \
                 -r 0 \
                 -z 1 \
@@ -34,7 +44,7 @@ while true; do
                 -l 0.0006 \
                 -q 0.0 \
                 -u 700 \
-                -n 5000 \
+                -n 100 \
                 -y 1 \
                 -e "d12"
 

@@ -19,19 +19,17 @@ Example of downloading the 100B dataset of FineWebEDU, from root directory:
 python dev/data/fineweb.py -t edu -v 100B
 100B runs for small few hours, depending on your internet and computer.
 """
-import os
 import argparse
 import multiprocessing as mp
+import os
 
 import numpy as np
 import tiktoken
+from data_common import write_datafile
 from datasets import load_dataset
 from tqdm import tqdm
-
 from transformers import AutoTokenizer
 
-
-from data_common import write_datafile
 # ------------------------------------------
 
 parser = argparse.ArgumentParser(description="FineWeb and Edu-FineWeb dataset preprocessing")
@@ -58,10 +56,11 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 # download the dataset
 if args.type == "classic":
-    fw = load_dataset("HuggingFaceFW/fineweb", name=remote_name, split="train")
+    fw = load_dataset("HuggingFaceFW/fineweb", name=remote_name, split='train[0:2]')
     name = "fineweb"
 elif args.type =="edu":
-    fw = load_dataset("HuggingFaceFW/fineweb-edu", name=remote_name, split="train")
+    # fw = load_dataset("~/.cache/huggingface/hub/datasets--HuggingFaceFW--fineweb-edu/blobs")
+    fw = load_dataset("HuggingFaceFW/fineweb-edu",  name="subsample", split='train')
     name = "edu_fineweb"
 
 def tokenize_llama(doc):
