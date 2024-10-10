@@ -1676,21 +1676,15 @@ int main(int argc, char *argv[]) {
 
     // if we found a checkpoint to resume from, load the optimization state
     int step = 0;
-    printf0("This is line number: %d\n", __LINE__);
     gpt2_allocate_state(&model, B, T);
-    printf0("This is line number: %d\n", __LINE__);
     if (resuming == 1) {
-        printf0("This is line number: %d\n", __LINE__);
         snprintf(filename_buffer, sizeof(filename_buffer), "%s/state_%08d_%05d.bin", output_log_dir, resume_max_step, multi_gpu_config.process_rank);
-        printf0("This is line number: %d\n", __LINE__);
         load_state(&step, &model, &train_loader, filename_buffer);
     }
-    printf0("This is line number: %d\n", __LINE__);
     // init an OutlierDetector the training loss
     OutlierDetector loss_outlier_detector, grad_norm_outlier_detector;
     init_detector(&loss_outlier_detector);
     init_detector(&grad_norm_outlier_detector);
-    printf0("This is line number: %d\n", __LINE__);
 
     // do some checks here before we kick off training
     // cross-check the desired sequence length T with the model's max sequence length
@@ -1708,43 +1702,33 @@ int main(int argc, char *argv[]) {
     }
     // in any case, this must be true or we'd index beyond the model's wpe (position embedding table)
     assert(T <= model.config.max_seq_len);
-    printf0("This is line number: %d\n", __LINE__);
 
     // train
     cudaEvent_t start, end;
     cudaCheck(cudaEventCreate(&start));
     cudaCheck(cudaEventCreate(&end));
     cudaCheck(cudaProfilerStart());
-    printf0("This is line number: %d\n", __LINE__);
 
     double total_sum_iteration_time_s = 0.0;
     float ema_tokens_per_second = 0.0f;
     for (; step <= train_num_batches; step++) {
         NvtxRange step_range("Train step", step);
-        printf0("This is line number: %d\n", __LINE__);
 
         int last_step = step == train_num_batches;
-        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while estimate the validation loss (all processes collaborate)
         if (step % val_loss_every == 0 || last_step) {
-            printf0("This is line number: %d\n", __LINE__);
             
             NvtxRange validation_range("validation");
             float val_loss = 0.0f;
-            printf0("This is line number: %d\n", __LINE__);
 
             dataloader_reset(&val_loader);
-            printf0("This is line number: %d\n", __LINE__);
 
             for (int i = 0; i < val_num_batches; i++) {
                 
-                printf0("This is line number: %d\n", __LINE__);
                 dataloader_next_batch(&val_loader);
                 
-                printf0("This is line number: %d\n", __LINE__);
                 val_loss += gpt2_validate(&model, val_loader.inputs, val_loader.targets, B, T);
-                printf0("This is line number: %d\n", __LINE__);
 
             }
             val_loss /= val_num_batches;
@@ -1752,7 +1736,6 @@ int main(int argc, char *argv[]) {
             printf0("val loss %f\n", val_loss);
             logger_log_val(&logger, step, val_loss);
         }
-        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while do model inference to print generated text (only rank 0)
         if (multi_gpu_config.process_rank == 0 && sample_every > 0 &&
@@ -1800,7 +1783,6 @@ int main(int argc, char *argv[]) {
             }
             printf("\n---\n");
         }
-        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while checkpoint the optimization state (all ranks)
         if ((checkpoint_every > 0 && output_log_dir != NULL && resuming == 0) &&
@@ -1818,7 +1800,6 @@ int main(int argc, char *argv[]) {
             }
         }
         resuming = 0;
-        printf0("This is line number: %d\n", __LINE__);
 
         // bit confusing: we want to make sure to eval and sample on 0th iteration
         // but also after the very last iteration. so we loop for step <= train_num_batches
