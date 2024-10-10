@@ -1,5 +1,5 @@
 /*
-GPT-2 Transformer Neural Net training loop. See README.md for usage.
+ChessGPT Transformer Neural Net training loop. See README.md for usage.
 */
 #include <unistd.h>
 #include <stdio.h>
@@ -86,8 +86,8 @@ constexpr const size_t IO_BUF_SIZE = 32 * 1024 * 1024;
 
 typedef struct {
     int max_seq_len; // max sequence length, e.g. 1024
-    int vocab_size; // vocab size, e.g. 50257
-    int padded_vocab_size; // padded to e.g. %128==0, 50304
+    int vocab_size; // vocab size, e.g. 72
+    int padded_vocab_size; // padded to e.g. %128==0, 128
     int num_layers; // number of layers, e.g. 12
     int num_heads; // number of heads in attention, e.g. 12
     int channels; // number of channels, e.g. 768
@@ -521,13 +521,14 @@ void gpt2_set_hyperparameters(GPT2Config* config, const char* depth_str) {
     assert(depth > 0); // atoi returns 0 if not a number
     int channels, num_heads;
     if      (depth == 6)  { channels = 384; num_heads = 6; }   // (unofficial) gpt2-tiny (30M)
+    if      (depth == 8)  { channels = 512; num_heads = 8; }   // gpt2-tiny (30M)
     else if (depth == 12) { channels = 768; num_heads = 12; }  // gpt2 (124M)
-    else if (depth == 24) { channels = 1024; num_heads = 16; } // gpt2-medium (350M)
-    else if (depth == 36) { channels = 1280; num_heads = 20; } // gpt2-large (774M)
-    else if (depth == 48) { channels = 1600; num_heads = 25; } // gpt2-xl (1558M)
-    else if (depth == 60) { channels = 1920; num_heads = 30; } // (unofficial) 2.7B
-    else if (depth == 72) { channels = 2880; num_heads = 30; } // (unofficial) 7.3B
-    else if (depth == 84) { channels = 3456; num_heads = 36; } // (unofficial) 12.2B
+    else if (depth == 24) { channels = 1024; num_heads = 16; } // (unofficial) gpt2-medium (350M)
+    else if (depth == 36) { channels = 1280; num_heads = 20; } // (unofficial) gpt2-large (774M)
+    else if (depth == 48) { channels = 1600; num_heads = 25; } // (unofficial) gpt2-xl (1558M)
+    else if (depth == 60) { channels = 1920; num_heads = 30; } // (unofficial) (unofficial) 2.7B
+    else if (depth == 72) { channels = 2880; num_heads = 30; } // (unofficial) (unofficial) 7.3B
+    else if (depth == 84) { channels = 3456; num_heads = 36; } // (unofficial) (unofficial) 12.2B
     else { fprintf(stderr, "Unsupported GPT-2 depth: %d\n", depth); exit(EXIT_FAILURE); }
     config->num_layers = depth;
     config->channels = channels;
@@ -578,9 +579,9 @@ void gpt_build_from_descriptor(GPT2 *model, const char* descriptor) {
         fprintf(stderr, "Unsupported model descriptor: %s\n", descriptor); exit(EXIT_FAILURE);
     }
 
-    // both GPT-2 and GPT-3 use the same tokenizer with 50257 tokens
-    model->config.vocab_size = 50257;
-    model->config.padded_vocab_size = 50304; // padded to 128 for CUDA kernel efficiency
+    // chessGPT use a tokenizer with 72 tokens
+    model->config.vocab_size = 72;
+    model->config.padded_vocab_size = 128; // padded to 128 for CUDA kernel efficiency
 
     gpt2_allocate_weights(model);
 
@@ -1366,9 +1367,9 @@ void error_usage() {
     fprintf(stderr, "Usage:   ./train_gpt2cu [options]\n");
     fprintf(stderr, "Options:\n");
     // file system input / output
-    fprintf(stderr, "  -i <string> train data filename pattern (default = dev/data/tinyshakespeare/tiny_shakespeare_train.bin)\n");
-    fprintf(stderr, "  -j <string> val data filename pattern (default = dev/data/tinyshakespeare/tiny_shakespeare_val.bin)\n");
-    fprintf(stderr, "  -e <string> input .bin filename or descriptor, see code comments as docs. (default = gpt2_124M_bf16.bin)\n");
+    fprintf(stderr, "  -i <string> train data filename pattern (default = dev/data/201506/201506_train_*.bin)\n");
+    fprintf(stderr, "  -j <string> val data filename pattern (default = dev/data/201506/201506_val_*.bin)\n");
+    fprintf(stderr, "  -e <string> input .bin filename or descriptor, see code comments as docs. (default = chessGPT_d8_bf16.bin)\n");
     fprintf(stderr, "  -o <string> output log dir (default = NULL, no logging)\n");
     fprintf(stderr, "  -lg <int>   log gpu info every x steps (default = -1; disabled)\n");
     fprintf(stderr, "  -n <int>    write optimization checkpoints every how many steps? (default 0, don't)\n");
@@ -1418,11 +1419,11 @@ void error_usage() {
 // main training loop
 int main(int argc, char *argv[]) {
     // read in the (optional) command line arguments
-    const char* train_data_pattern = "dev/data/tinyshakespeare/tiny_shakespeare_train.bin";
-    const char* val_data_pattern = "dev/data/tinyshakespeare/tiny_shakespeare_val.bin";
-    const char* load_filename = "gpt2_124M_bf16.bin"; // bf16 weights of the model
+    const char* train_data_pattern = "dev/data/201506-moves/201506_train_*.bin";
+    const char* val_data_pattern = "dev/data/201506-moves/201506_val_*.bin";
+    const char* load_filename = "chessGPT_d12_bf16.bin"; // bf16 weights of the model
     const char* lr_scheduler_type = "cosine";
-    const char* output_log_dir = NULL;
+    const char* output_log_dir = "log_chess_gpt";
     int checkpoint_every = 0; // write checkpoints every how many steps?
     int checkpoints_keep = 0; // how long checkpoint history do we keep? (in units of checkpoints)
     int major_checkpoint_every = 0; // major checkpoints never get deleted when maintaining history
@@ -1486,7 +1487,7 @@ int main(int argc, char *argv[]) {
         else if (argv[i][1] == 'w') { use_master_weights = atoi(argv[i+1]); }
         else if (argv[i][1] == 'z') { zero_stage = atoi(argv[i+1]); }
         else if (argv[i][1] == 'r') { recompute = atoi(argv[i+1]); }
-        else if (argv[i][1] == 'h') { hellaswag_eval = atoi(argv[i+1]); }
+        // else if (argv[i][1] == 'h') { hellaswag_eval = atoi(argv[i+1]); }
         else if (argv[i][1] == 'k') { lr_scheduler_type = argv[i+1]; }
         else if (argv[i][1] == 'p' && argv[i][2] == 'i') { strcpy(nccl_init_method, argv[i+1]); }
         else if (argv[i][1] == 'p' && argv[i][2] == 'f') { strcpy(fs_path, argv[i+1]); }
@@ -1628,11 +1629,6 @@ int main(int argc, char *argv[]) {
     const char* hellaswag_path = "dev/data/hellaswag/hellaswag_val.bin";
     const bool hellaswag_available = access(hellaswag_path, F_OK) == 0;
     const bool run_hellaswag = hellaswag_eval && hellaswag_available;
-    if (run_hellaswag) {
-        evalloader_init(&eval_loader, hellaswag_path, B, T, multi_gpu_config.process_rank, multi_gpu_config.num_processes);
-    }
-    printf0("| run hellaswag         | %-50s |\n", run_hellaswag ? "yes" : "no");
-    printf0("+-----------------------+----------------------------------------------------+\n");
 
     // pretty print in a table the multi-gpu configuration as well
     set_zero_configs(&multi_gpu_config, zero_stage, model.num_parameters);
@@ -1641,10 +1637,7 @@ int main(int argc, char *argv[]) {
     printf0("+-----------------------+----------------------------------------------------+\n");
 
     // prints outside of pretty table to here and below
-    if (!hellaswag_available) {
-        printf0("HellaSwag eval not found at %s, skipping its evaluation\n", hellaswag_path);
-        printf0("You can run `python dev/data/hellaswag.py` to export and use it with `-h 1`.\n");
-    }
+ 
     // more prints related to allocations from gpt2_build_from_checkpoint down here to not mess up our table above
     printf0("num_parameters: %zu => bytes: %zu\n", model.num_parameters, model.num_parameters_bytes);
     printf0("allocated %d MiB for model parameters\n", (int)round(model.num_parameters_bytes / (1024 * 1024)));
@@ -1660,7 +1653,7 @@ int main(int argc, char *argv[]) {
 
     // set up the Tokenizer
     Tokenizer tokenizer;
-    tokenizer_init(&tokenizer, "gpt2_tokenizer.bin");
+    tokenizer_init(&tokenizer, "chessGPT_tokenizer.bin");
 
     // set up learning rate scheduler
     LearningRateScheduler lr_scheduler;
@@ -1727,25 +1720,6 @@ int main(int argc, char *argv[]) {
             val_loss = multi_gpu_cpu_float_sum(val_loss, &multi_gpu_config) / multi_gpu_config.num_processes;
             printf0("val loss %f\n", val_loss);
             logger_log_val(&logger, step, val_loss);
-        }
-
-        // once in a while estimate HellaSwag accuracy (all processes collaborate)
-        if (run_hellaswag &&
-           ((step > 0 && step % val_loss_every == 0) || last_step)) {
-            NvtxRange evaluation_range("evaluation");
-            float eval_acc_norm = 0.0f;
-            evalloader_reset(&eval_loader);
-            for (int i = 0; i < eval_loader.num_batches; i++) {
-                if (i % 10 == 0) { printf("evaluating HellaSwag: %d/%d\r", i, eval_loader.num_batches); }
-                evalloader_next_batch(&eval_loader);
-                gpt2_validate(&model, eval_loader.inputs, eval_loader.targets, B, T);
-                int correct = evalloader_stat_losses(&eval_loader, model.cpu_losses);
-                eval_acc_norm += (float)correct;
-            }
-            // careful because not all ranks may have the exact same allocation of number of examples
-            eval_acc_norm = multi_gpu_cpu_float_sum(eval_acc_norm, &multi_gpu_config);
-            printf0("HellaSwag: %d/%d = %f\n", (int)eval_acc_norm, eval_loader.num_examples, eval_acc_norm / eval_loader.num_examples);
-            logger_log_eval(&logger, step, eval_acc_norm / eval_loader.num_examples);
         }
 
         // once in a while do model inference to print generated text (only rank 0)
