@@ -21,13 +21,13 @@ import argparse
 import multiprocessing as mp
 import os
 
-import chess
 import datasets
 import numpy as np
-import tiktoken
 from data_common import write_datafile
 from datasets import load_dataset
 from tqdm import tqdm
+
+from dev.data.uci_tokenizers import chessGptTokenizer
 
 # ------------------------------------------
 
@@ -36,9 +36,9 @@ lichess_months = [subset.name[:-6] for subset in ds_builder.BUILDER_CONFIGS if s
 
 supported_model_types = ['gpt-2']
 
-parser = argparse.ArgumentParser(description="FineWeb and Edu-FineWeb dataset preprocessing")
+parser = argparse.ArgumentParser(description="Lichess UCI dataset preprocessing")
 parser.add_argument("-d", "--date", choices=lichess_months, default="201301", help="Date (format: 'yyyymm') to be tokenized.")
-parser.add_argument("-m", "--model_desc", choices=supported_model_types, default="gpt-2", help="Model descriptor.")
+parser.add_argument("-m", "--model_desc", choices=supported_model_types, default=supported_model_types[0], help="Model descriptor.")
 parser.add_argument("-s", "--shard_size", type=int, default=10**8, help="Size of each data shard in the output .bin files, in tokens")
 args = parser.parse_args()
 
@@ -52,25 +52,12 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 fw = load_dataset("austindavis/lichess_uci", name=remote_name, split='train')
 
-def chessGPT():
-    special_tokens = ["<pad>", "<s>", "</s>", "<unk>"]
-    chess_vocab = special_tokens + chess.SQUARE_NAMES + list("QBRN")
-    mergeable_ranks = {k.encode():v for (v,k) in enumerate(chess_vocab)}
-    chess_pat_str = r'[a-h][1-8]|[QBRN]'
-
-    return tiktoken.Encoding(
-        name="chess_enc",
-        pat_str=chess_pat_str, # or \d|\s
-        mergeable_ranks=mergeable_ranks,
-        special_tokens={k:v for (v,k) in enumerate(special_tokens)},
-    )
-
 def tokenize_gpt2(doc):
     # tokenizes a single document and returns a numpy array of uint16 tokens
-    enc = chessGPT()
+    enc = chessGptTokenizer()
     encode = lambda s: enc.encode_ordinary(s)
-    eot = enc._special_tokens['</s>'] # end of text token
-    tokens = [eot] # the special </s> token delimits all documents
+    eot = enc._special_tokens['<|endoftext|>'] # end of text token
+    tokens = [eot] # the special <|endoftext|> token delimits all documents
     tokens.extend(encode(doc["transcript"]))
     tokens_np = np.array(tokens)
     assert (0 <= tokens_np).all() and (tokens_np < 2**16).all(), "token dictionary too large for uint16"
@@ -79,7 +66,6 @@ def tokenize_gpt2(doc):
 
 token_dtype = {
     "gpt-2": np.uint16,
-    "llama-3": np.uint32
 }[args.model_desc]
 
 # tokenize all documents and write output shards, each of shard_size tokens (last shard has remainder)
