@@ -200,14 +200,14 @@ GPUUtilInfo get_gpu_utilization_info() {
     // query different infos directly
     nvmlCheck(nvmlDeviceGetClockInfo(device, NVML_CLOCK_SM, &info.clock));
     nvmlCheck(nvmlDeviceGetMaxClockInfo(device, NVML_CLOCK_SM, &info.max_clock));
-    nvmlCheck(nvmlDeviceGetPowerManagementLimit(device, &info.power_limit));
-    nvmlCheck(nvmlDeviceGetPowerUsage(device, &info.power));
+    // nvmlCheck(nvmlDeviceGetPowerManagementLimit(device, &info.power_limit));
+    // nvmlCheck(nvmlDeviceGetPowerUsage(device, &info.power));
     nvmlCheck(nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU, &info.temperature));
     nvmlCheck(nvmlDeviceGetTemperatureThreshold(device, NVML_TEMPERATURE_THRESHOLD_SLOWDOWN, &info.temp_slowdown));
     unsigned long long throttle;
     nvmlCheck(nvmlDeviceGetCurrentClocksThrottleReasons(device, &throttle));
     info.throttle_reason = get_throttle_reason(throttle);
-    nvmlCheck(nvmlDeviceGetFanSpeed(device, &info.fan));
+    // nvmlCheck(nvmlDeviceGetFanSpeed(device, &info.fan));
 
     // for "utilization", we look at recorded samples. In principle, we could query the driver for how many samples
     // to request, but then we'd need to dynamically allocate sufficient space. Let's just hard-code a limit of 128,
@@ -222,7 +222,6 @@ GPUUtilInfo get_gpu_utilization_info() {
         gpu_utilization += (float)buffer[i].sampleValue.uiVal;
     }
     gpu_utilization /= (float)sample_count;
-
     // sample count may have been modified by the query above; reset back to buffer size
     sample_count = BUFFER_LIMIT;
     nvmlCheck(nvmlDeviceGetSamples(device, NVML_MEMORY_UTILIZATION_SAMPLES, 0, &v_type, &sample_count, buffer));
@@ -231,7 +230,6 @@ GPUUtilInfo get_gpu_utilization_info() {
         mem_utilization += (float)buffer[i].sampleValue.uiVal;
     }
     mem_utilization /= (float)sample_count;
-
     info.gpu_utilization = gpu_utilization;
     info.mem_utilization = mem_utilization;
     return info;
