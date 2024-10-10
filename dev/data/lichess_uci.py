@@ -26,8 +26,7 @@ import numpy as np
 from data_common import write_datafile
 from datasets import load_dataset
 from tqdm import tqdm
-
-from dev.data.uci_tokenizers import chessGptTokenizer
+from uci_tokenizers import chessGptTokenizer
 
 # ------------------------------------------
 
