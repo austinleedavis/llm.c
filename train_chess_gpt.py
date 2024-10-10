@@ -4,10 +4,10 @@ Will save the model weights into files, to be read from C as initialization.
 
 Example launches to only benchmark the speed of bfloat16 compiled GPU training:
 1 GPU:
-python train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
+python train_chess_gpt.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
 you can also turn on flash-attention by appending --flash=1
 4 GPU:
-torchrun --standalone --nproc_per_node=4 train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
+torchrun --standalone --nproc_per_node=4 train_chess_gpt.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
 """
 
 import glob
@@ -27,6 +27,8 @@ from torch.distributed import destroy_process_group, init_process_group
 from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.nn import functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+
+from dev.data.uci_tokenizers import chessGptTokenizer
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
@@ -109,12 +111,12 @@ class Block(nn.Module):
         return x
 
 # -----------------------------------------------------------------------------
-# The main GPT-2 model
+# The main chess GPT model
 
 @dataclass
 class GPTConfig:
     block_size: int = 1024
-    vocab_size: int = 50257
+    vocab_size: int = 72
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -184,21 +186,19 @@ class GPT(nn.Module):
         return logits, loss
 
     @classmethod
-    def from_pretrained(cls, model_type):
-        """Loads pretrained GPT-2 model weights from huggingface"""
-        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
+    def from_pretrained(cls, model_type: str):
+        """Loads pretrained chessGPT model weights from huggingface"""
+        assert model_type in {'chessGPT_d8', 'chessGPT_d12'}
         from transformers import GPT2LMHeadModel
         print("loading weights from pretrained gpt: %s" % model_type)
 
         # n_layer, n_head and n_embd are determined from model_type
         config_args = {
-            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
-            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), # 350M params
-            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
-            'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
+            'chessGPT_d8':         dict(n_layer=8, n_head=8, n_embd=512),  
+            'chessGPT_d12':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
         }[model_type]
-        config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
+        config_args['vocab_size'] = 72 # always 72 for chessGPT model checkpoints
+        config_args['block_size'] = 1024 # always 1024 for chessGPT model checkpoints
         # create a from-scratch initialized minGPT model
         config = GPTConfig(**config_args)
         model = GPT(config)
@@ -207,7 +207,7 @@ class GPT(nn.Module):
         sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
 
         # init a huggingface/transformers model
-        model_hf = GPT2LMHeadModel.from_pretrained(model_type)
+        model_hf = GPT2LMHeadModel.from_pretrained('austindavis/'+model_type)
         sd_hf = model_hf.state_dict()
 
         # copy while ensuring all of the parameters are aligned and match in names and shapes
@@ -302,7 +302,7 @@ def _peek_data_shard(filename):
         print("ERROR: magic number mismatch in the data .bin file!")
         print("---> HINT: Are you passing in a correct file with --input_bin?")
         print("---> HINT: Dataset encoding changed recently, re-run data prepro or refer again to README")
-        print("---> HINT: For example re-run: `python dev/data/tinyshakespeare.py`, then re-try")
+        print("---> HINT: For example re-run: `python dev/data/lichess_uci.py`, then re-try")
         exit(1)
     assert header[1] == 1, "unsupported version"
     ntok = header[2] # number of tokens (claimed)
@@ -422,16 +422,16 @@ def write_tensors(model_tensors, L, file, dtype):
 @torch.no_grad()
 def pad_vocab(tensor, multiple=128, value=0):
     """
-    The dimension of the vocab size in GPT-2 is 50,257
+    The dimension of the vocab size in chessGPT is 72
     which is unfortunately a very unfriendly number for a lot of
     matrix operations on the GPU. So we pad it to the nearest
-    friendlier multiple, e.g. 50,304 if multiple=128 when we
-    export the weights into C land. This is a NOOP algorithmically
-    and is only done to make the tensor operations more efficient.
+    friendlier multiple (e.g., 128) when we export the weights 
+    into C land. This is a NOOP algorithmically and is only done to 
+    make the tensor operations more efficient.
     """
     assert tensor.ndim == 2
     V, C = tensor.shape
-    assert V == 50257, "just being defensive here"
+    assert V == 72, "just being defensive here"
     # calculate padded vocab size by rounding up to nearest multiple
     Vp = ((V + multiple - 1) // multiple) * multiple
     # pad the tensor
@@ -537,10 +537,10 @@ if __name__ == "__main__":
     # and save model weights and debug state to disk on the first iteration
     parser = argparse.ArgumentParser()
     # file system input / output
-    parser.add_argument("--input_bin", type=str, default="dev/data/tinyshakespeare/tiny_shakespeare_val.bin", help="input .bin to train on")
+    parser.add_argument("--input_bin", type=str, default="dev/data/201506-moves/201506_train_*.bin", help="input .bin to train on")
     parser.add_argument("--input_val_bin", type=str, default="", help="input .bin to eval validation loss on")
-    parser.add_argument("--output_dir", type=str, default="", help="output directory to which to write logs and checkpoints")
-    parser.add_argument("--model", type=str, default="gpt2", help="gpt2|gpt2-medium|gpt2-large|gpt2-xl|d12|d24|d36|d48")
+    parser.add_argument("--output_dir", type=str, default="chessGPT", help="output directory to which to write logs and checkpoints")
+    parser.add_argument("--model", choices=['chessGPT_d8','chessGPT_d12','d8','d12'], default="d12", help="Model type to train")
     # token layout for each step of the optimization
     parser.add_argument("--batch_size", type=int, default=4, help="batch size, in units of #batch dimensions")
     parser.add_argument("--sequence_length", type=int, default=64, help="sequence length")
@@ -576,7 +576,6 @@ if __name__ == "__main__":
     B, T = args.batch_size, args.sequence_length
     assert 1 <= T <= 1024
     assert args.dtype in {"float32", "float16", "bfloat16"}
-    assert args.model in {"gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "d12", "d24", "d36", "d48"}
 
     # set up DDP (distributed data parallel). torchrun sets this env variable
     ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
@@ -639,22 +638,23 @@ if __name__ == "__main__":
     FLASH = args.flash
 
     # init (and write) the tokenizer
-    enc = tiktoken.get_encoding("gpt2")
+    enc = chessGptTokenizer()
     if master_process and args.write_tensors: # tokenizer is technically not tensors but ok
-        write_tokenizer(enc, "gpt2_tokenizer.bin")
+        write_tokenizer(enc, "chessGPT_tokenizer.bin")
 
     # init the model, either from scratch or from OpenAI pretrained checkpoint
     if args.model[0] == "d":
         # from scratch (random weights)
         model_config = {
-            "d12": GPTConfig(block_size=1024, vocab_size=50257, n_layer=12, n_head=12, n_embd=768),
-            "d24": GPTConfig(block_size=1024, vocab_size=50257, n_layer=24, n_head=16, n_embd=1024),
-            "d36": GPTConfig(block_size=1024, vocab_size=50257, n_layer=36, n_head=20, n_embd=1280),
-            "d48": GPTConfig(block_size=1024, vocab_size=50257, n_layer=48, n_head=25, n_embd=1600),
+            "d8": GPTConfig(block_size=1024, vocab_size=72, n_layer=8, n_head=8, n_embd=512),
+            "d12": GPTConfig(block_size=1024, vocab_size=72, n_layer=12, n_head=12, n_embd=768),
+            "d24": GPTConfig(block_size=1024, vocab_size=72, n_layer=24, n_head=16, n_embd=1024),
+            "d36": GPTConfig(block_size=1024, vocab_size=72, n_layer=36, n_head=20, n_embd=1280),
+            "d48": GPTConfig(block_size=1024, vocab_size=72, n_layer=48, n_head=25, n_embd=1600),
         }[args.model]
         model = GPT(model_config)
     else:
-        # load the GPT-2 model weights
+        # load the chessGPT model weights
         model = GPT.from_pretrained(args.model)
     model.train()
     model.to(device)
@@ -683,14 +683,17 @@ if __name__ == "__main__":
         logits, loss = model(x, y)
         loss.backward()
         # save model params, in both float32 and bfloat16
-        model_to_size = {"gpt2": "124M", "gpt2-medium": "355M", "gpt2-large": "774M", "gpt2-xl": "1558M"}
-        model_to_size.update({f"d{d}": f"d{d}" for d in [12, 24, 36, 48]})
+        model_to_size = {
+            'chessGPT_d8':  "25.7M",
+            'chessGPT_d12':  "85.7M",
+        }
+        model_to_size.update({f"d{d}": f"d{d}" for d in [8, 12]})
         model_size_str = model_to_size[args.model] # e.g. "124M", or "d12"
-        write_model(model, f"gpt2_{model_size_str}.bin", dtype="float32")
-        write_model(model, f"gpt2_{model_size_str}_bf16.bin", dtype="bfloat16")
+        write_model(model, f"chessGPT_{model_size_str}.bin", dtype="float32")
+        write_model(model, f"chessGPT_{model_size_str}_bf16.bin", dtype="bfloat16")
         # save x, y, logits, loss, and parameter gradients, for debugging C
         # always store these in fp32 to have an accurate reference (?)
-        write_state(model, x, y, logits, loss, f"gpt2_{model_size_str}_debug_state.bin")
+        write_state(model, x, y, logits, loss, f"chessGPT_{model_size_str}_debug_state.bin")
         # reset the train_loader for the optimization below
         train_loader.reset()
 
