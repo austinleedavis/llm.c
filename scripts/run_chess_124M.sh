@@ -31,9 +31,9 @@ while true; do
     #    d12: b=38
     # Set n=100 to checkpoint model in case of crash
     mpirun -np 1 ./train_chesscu \
-                -e "chessGPT_d8_bf16.bin" 
-                -i "dev/data/201506-moves/201506_train_*.bin" 
-                -j "dev/data/201506-moves/201506_val_*.bin" 
+                -e "chessGPT_d8_bf16.bin" \
+                -i "dev/data/201506-moves/201506_train_*.bin" \
+                -j "dev/data/201301-moves/201301_val_*.bin" \
                 -lg 1 -n 0 -o $out_dir -y 1 \
                 -b 35 -t 1024 \
                 -g 64 -s 20  -v 250\

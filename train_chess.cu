@@ -579,9 +579,9 @@ void gpt_build_from_descriptor(GPT2 *model, const char* descriptor) {
         fprintf(stderr, "Unsupported model descriptor: %s\n", descriptor); exit(EXIT_FAILURE);
     }
 
-    // chessGPT use a tokenizer with 72 tokens
-    model->config.vocab_size = 72;
-    model->config.padded_vocab_size = 128; // padded to 128 for CUDA kernel efficiency
+    // chessGPT uses a tokenizer with 72 tokens
+    model->config.vocab_size = 8192;
+    model->config.padded_vocab_size = 8192; // padded to %128=0 for CUDA kernel efficiency
 
     gpt2_allocate_weights(model);
 
@@ -761,51 +761,28 @@ void gpt2_forward(GPT2 *model, const int* inputs, size_t B, size_t T) {
 // Some of the evals (e.g. HellaSwag) require the per-token losses, which are produced here.
 float gpt2_validate(GPT2 *model, const int* inputs, const int* targets, size_t B, size_t T) {
     assert(targets != NULL);
-    printf0("This is line number: %d\n", __LINE__);
 
-    printf0("This is line number: %d\n", __LINE__);
     // forward the model itself
-    printf0("This is line number: %d\n", __LINE__);
     gpt2_forward(model, inputs, B, T);
-    printf0("This is line number: %d\n", __LINE__);
     // convenience shortcuts, size_t instead of int so that pointer arithmetics don't overflow
-    printf0("This is line number: %d\n", __LINE__);
     const size_t V = model->config.vocab_size;
-    printf0("This is line number: %d\n", __LINE__);
     const size_t Vp = model->config.padded_vocab_size;
-    printf0("This is line number: %d\n", __LINE__);
 
-    printf0("This is line number: %d\n", __LINE__);
     NvtxRange classifier_and_loss_range("classifier_and_loss");
-    printf0("This is line number: %d\n", __LINE__);
     ActivationTensors acts = model->acts;
-    printf0("This is line number: %d\n", __LINE__);
     float mean_loss = 0.0f;
-    printf0("This is line number: %d\n", __LINE__);
     // fused classifier: does the forward pass and first part of the backward pass
-    printf0("This is line number: %d\n", __LINE__);
     const float dloss = 1.0f / (B * T); // results in the uniform average loss over all elements
-    printf0("This is line number: %d\n", __LINE__);
     // note: we don't need to generate dlogits here
-    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemset(acts.losses, 0, B*T*sizeof(float)));
-    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemcpy(model->targets, targets, B * T * sizeof(int), cudaMemcpyHostToDevice));
-    printf0("This is line number: %d\n", __LINE__);
     tokenCheck(targets, B*T, V); // while the memcpy is underway, validate the targets
-    printf0("This is line number: %d\n", __LINE__);
     fused_classifier(acts.output, acts.losses, dloss, model->targets, B, T, V, Vp, False, main_stream);
-    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemcpy(model->cpu_losses, acts.losses, B * T * sizeof(float), cudaMemcpyDeviceToHost));
-    printf0("This is line number: %d\n", __LINE__);
     for (int i = 0; i < B*T; i++) {
-        printf0("This is line number: %d\n", __LINE__);
         mean_loss += model->cpu_losses[i];
-        printf0("This is line number: %d\n", __LINE__);
     }
-    printf0("This is line number: %d\n", __LINE__);
     mean_loss /= B*T;
-    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaDeviceSynchronize());
     return mean_loss;
 }

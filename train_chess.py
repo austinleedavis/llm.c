@@ -116,7 +116,7 @@ class Block(nn.Module):
 @dataclass
 class GPTConfig:
     block_size: int = 1024
-    vocab_size: int = 72
+    vocab_size: int = 8192
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -197,7 +197,7 @@ class GPT(nn.Module):
             'chessGPT_d8':         dict(n_layer=8, n_head=8, n_embd=512),  
             'chessGPT_d12':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
         }[model_type]
-        config_args['vocab_size'] = 72 # always 72 for chessGPT model checkpoints
+        config_args['vocab_size'] = 8192 # always 72 for chessGPT model checkpoints
         config_args['block_size'] = 1024 # always 1024 for chessGPT model checkpoints
         # create a from-scratch initialized minGPT model
         config = GPTConfig(**config_args)
@@ -420,7 +420,7 @@ def write_tensors(model_tensors, L, file, dtype):
     write_fun(model_tensors["transformer.ln_f.bias"], file) # (C, )
 
 @torch.no_grad()
-def pad_vocab(tensor, multiple=128, value=0):
+def pad_vocab(tensor, multiple=128*64, value=0):
     """
     The dimension of the vocab size in chessGPT is 72
     which is unfortunately a very unfriendly number for a lot of
@@ -431,7 +431,7 @@ def pad_vocab(tensor, multiple=128, value=0):
     """
     assert tensor.ndim == 2
     V, C = tensor.shape
-    assert V == 72, "just being defensive here"
+    assert V == 8192, "just being defensive here"
     # calculate padded vocab size by rounding up to nearest multiple
     Vp = ((V + multiple - 1) // multiple) * multiple
     # pad the tensor
@@ -646,11 +646,11 @@ if __name__ == "__main__":
     if args.model[0] == "d":
         # from scratch (random weights)
         model_config = {
-            "d8": GPTConfig(block_size=1024, vocab_size=72, n_layer=8, n_head=8, n_embd=512),
-            "d12": GPTConfig(block_size=1024, vocab_size=72, n_layer=12, n_head=12, n_embd=768),
-            "d24": GPTConfig(block_size=1024, vocab_size=72, n_layer=24, n_head=16, n_embd=1024),
-            "d36": GPTConfig(block_size=1024, vocab_size=72, n_layer=36, n_head=20, n_embd=1280),
-            "d48": GPTConfig(block_size=1024, vocab_size=72, n_layer=48, n_head=25, n_embd=1600),
+            "d8": GPTConfig(block_size=1024, vocab_size=8192, n_layer=8, n_head=8, n_embd=512),
+            "d12": GPTConfig(block_size=1024, vocab_size=8192, n_layer=12, n_head=12, n_embd=768),
+            "d24": GPTConfig(block_size=1024, vocab_size=8192, n_layer=24, n_head=16, n_embd=1024),
+            "d36": GPTConfig(block_size=1024, vocab_size=8192, n_layer=36, n_head=20, n_embd=1280),
+            "d48": GPTConfig(block_size=1024, vocab_size=8192, n_layer=48, n_head=25, n_embd=1600),
         }[args.model]
         model = GPT(model_config)
     else:
@@ -684,11 +684,11 @@ if __name__ == "__main__":
         loss.backward()
         # save model params, in both float32 and bfloat16
         model_to_size = {
-            'chessGPT_d8':  "25.7M",
-            'chessGPT_d12':  "85.7M",
+            'chessGPT_d8':  "25M",
+            'chessGPT_d12':  "85M",
         }
         model_to_size.update({f"d{d}": f"d{d}" for d in [8, 12]})
-        model_size_str = model_to_size[args.model] # e.g. "124M", or "d12"
+        model_size_str = model_to_size[args.model] # e.g. "25M", or "d12"
         write_model(model, f"chessGPT_{model_size_str}.bin", dtype="float32")
         write_model(model, f"chessGPT_{model_size_str}_bf16.bin", dtype="bfloat16")
         # save x, y, logits, loss, and parameter gradients, for debugging C
