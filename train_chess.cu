@@ -761,27 +761,51 @@ void gpt2_forward(GPT2 *model, const int* inputs, size_t B, size_t T) {
 // Some of the evals (e.g. HellaSwag) require the per-token losses, which are produced here.
 float gpt2_validate(GPT2 *model, const int* inputs, const int* targets, size_t B, size_t T) {
     assert(targets != NULL);
-    // forward the model itself
-    gpt2_forward(model, inputs, B, T);
-    // convenience shortcuts, size_t instead of int so that pointer arithmetics don't overflow
-    const size_t V = model->config.vocab_size;
-    const size_t Vp = model->config.padded_vocab_size;
+    printf0("This is line number: %d\n", __LINE__);
 
+    printf0("This is line number: %d\n", __LINE__);
+    // forward the model itself
+    printf0("This is line number: %d\n", __LINE__);
+    gpt2_forward(model, inputs, B, T);
+    printf0("This is line number: %d\n", __LINE__);
+    // convenience shortcuts, size_t instead of int so that pointer arithmetics don't overflow
+    printf0("This is line number: %d\n", __LINE__);
+    const size_t V = model->config.vocab_size;
+    printf0("This is line number: %d\n", __LINE__);
+    const size_t Vp = model->config.padded_vocab_size;
+    printf0("This is line number: %d\n", __LINE__);
+
+    printf0("This is line number: %d\n", __LINE__);
     NvtxRange classifier_and_loss_range("classifier_and_loss");
+    printf0("This is line number: %d\n", __LINE__);
     ActivationTensors acts = model->acts;
+    printf0("This is line number: %d\n", __LINE__);
     float mean_loss = 0.0f;
+    printf0("This is line number: %d\n", __LINE__);
     // fused classifier: does the forward pass and first part of the backward pass
+    printf0("This is line number: %d\n", __LINE__);
     const float dloss = 1.0f / (B * T); // results in the uniform average loss over all elements
+    printf0("This is line number: %d\n", __LINE__);
     // note: we don't need to generate dlogits here
+    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemset(acts.losses, 0, B*T*sizeof(float)));
+    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemcpy(model->targets, targets, B * T * sizeof(int), cudaMemcpyHostToDevice));
+    printf0("This is line number: %d\n", __LINE__);
     tokenCheck(targets, B*T, V); // while the memcpy is underway, validate the targets
+    printf0("This is line number: %d\n", __LINE__);
     fused_classifier(acts.output, acts.losses, dloss, model->targets, B, T, V, Vp, False, main_stream);
+    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaMemcpy(model->cpu_losses, acts.losses, B * T * sizeof(float), cudaMemcpyDeviceToHost));
+    printf0("This is line number: %d\n", __LINE__);
     for (int i = 0; i < B*T; i++) {
+        printf0("This is line number: %d\n", __LINE__);
         mean_loss += model->cpu_losses[i];
+        printf0("This is line number: %d\n", __LINE__);
     }
+    printf0("This is line number: %d\n", __LINE__);
     mean_loss /= B*T;
+    printf0("This is line number: %d\n", __LINE__);
     cudaCheck(cudaDeviceSynchronize());
     return mean_loss;
 }
@@ -1366,52 +1390,61 @@ void delete_checkpoint(const char* output_log_dir, int step, MultiGpuConfig* mul
 void error_usage() {
     fprintf(stderr, "Usage:   ./train_gpt2cu [options]\n");
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --help      Display this message.\n");
     // file system input / output
+    fprintf(stderr, " > File system input /\n");
+    fprintf(stderr, "  -e <string> input .bin filename or descriptor, see code comments as docs. (default = chessGPT_d8_bf16.bin)\n");
     fprintf(stderr, "  -i <string> train data filename pattern (default = dev/data/201506/201506_train_*.bin)\n");
     fprintf(stderr, "  -j <string> val data filename pattern (default = dev/data/201506/201506_val_*.bin)\n");
-    fprintf(stderr, "  -e <string> input .bin filename or descriptor, see code comments as docs. (default = chessGPT_d8_bf16.bin)\n");
-    fprintf(stderr, "  -o <string> output log dir (default = NULL, no logging)\n");
     fprintf(stderr, "  -lg <int>   log gpu info every x steps (default = -1; disabled)\n");
     fprintf(stderr, "  -n <int>    write optimization checkpoints every how many steps? (default 0, don't)\n");
     fprintf(stderr, "  -nk <int>   max number of checkpoints to keep in the directory, removing old ones (0 = disable, default)\n");
     fprintf(stderr, "  -nm <int>   every how many step checkpoints are considered major? major checkpoints never get deleted.\n");
+    fprintf(stderr, "  -o <string> output log dir (default = log_chess_gpt, no logging)\n");
     fprintf(stderr, "  -y <int>    resume optimization found inside output log dir? (0=restart/overwrite, 1=resume/append)\n");
     // token layout for each step of the optimization
+    fprintf(stderr, " > Token layout for each step of optimization\n");
     fprintf(stderr, "  -b <int>    (per-GPU, micro) batch size B (default = 4)\n");
-    fprintf(stderr, "  -t <int>    sequence length T (default = 1024)\n");
     fprintf(stderr, "  -d <int>    total desired batch size (default = B * T * num_processes, i.e. no grad accumulation\n");
+    fprintf(stderr, "  -t <int>    sequence length T (default = 1024)\n");
     // workload (number of steps)
+    fprintf(stderr, " > Workload (number of steps)\n");
     fprintf(stderr, "  -x <int>    max_steps of optimization to run (-1 (default) = disable, run 1 epoch)\n");
     // optimization
+    fprintf(stderr, " > Optimization\n");
+    fprintf(stderr, "  -c <float>  weight decay (default = 0.0f)\n");
     fprintf(stderr, "  -k <string> learning rate scheduler (default = cosine)\n");
     fprintf(stderr, "  -l <float>  learning rate (default = 3e-4f)\n");
-    fprintf(stderr, "  -u <int>    learning rate warmup iterations (default = 0, no warmup)\n");
     fprintf(stderr, "  -q <float>  learning rate decay: final fraction, at end of training (default = 1.0 (no decay))\n");
-    fprintf(stderr, "  -c <float>  weight decay (default = 0.0f)\n");
-    fprintf(stderr, "  -sl <float> outlier stability: skip update if loss goes above this in zscore (0.0f=off)\n");
     fprintf(stderr, "  -sg <float> outlier stability: skip update if grad_norm goes above this in zscore (0.0f=off)\n");
+    fprintf(stderr, "  -sl <float> outlier stability: skip update if loss goes above this in zscore (0.0f=off)\n");
+    fprintf(stderr, "  -u <int>    learning rate warmup iterations (default = 0, no warmup)\n");
     // evaluation
-    fprintf(stderr, "  -v <int>    val_loss_every, how often we evaluate val loss (default = 20)\n");
+    fprintf(stderr, " > Evaluation\n");
+    fprintf(stderr, "  -g <int>    genT, how many steps of inference we do (default = 64)\n");
     fprintf(stderr, "  -m <int>    val_max_steps, up to how many val batches to estimate val loss? (default = 20)\n");
     fprintf(stderr, "  -s <int>    sample_every, how often we inference the model (default = 20)\n");
-    fprintf(stderr, "  -g <int>    genT, how many steps of inference we do (default = 64)\n");
-    fprintf(stderr, "  -h <int>    hellaswag eval run? (default = 0)\n");
+    fprintf(stderr, "  -v <int>    val_loss_every, how often we evaluate val loss (default = 20)\n");
     // debugging
+    fprintf(stderr, " > Debugging\n");
     fprintf(stderr, "  -a <int>    overfit a single batch? 0/1. useful for debugging\n");
     // numerics
+    fprintf(stderr, " > Numerics\n");
     fprintf(stderr, "  -f <int>    enable_tf32 override (default: 1, set to 0 to disable tf32)\n");
-    fprintf(stderr, "  -w <int>    keep f32 copy of weights for the optimizer? (default: 1)\n");
     fprintf(stderr, "  -ge <int>   gelu fusion: 0=none, 1=forward, 2=forward+backward (default: 2 for >=SM90, 0 for older GPUs)\n");
+    fprintf(stderr, "  -w <int>    keep f32 copy of weights for the optimizer? (default: 1)\n");
     // memory management
-    fprintf(stderr, "  -z <int>    zero_stage, Zero Optimization Stage, 0,1,2,3 (default = 0)\n");
+    fprintf(stderr, " > Memory management\n");
     fprintf(stderr, "  -r <int>    recompute: less memory but less speed. (default = 1), 0|1|2 = none,gelu,gelu+ln\n");
+    fprintf(stderr, "  -z <int>    zero_stage, Zero Optimization Stage, 0,1,2,3 (default = 0)\n");
     // multi-node settings
-    fprintf(stderr, "  -pn <int>    num_processes (default = 1)\n");
-    fprintf(stderr, "  -pr <int>    process_rank (default = 0)\n");
+    fprintf(stderr, " > Multi-node settings\n");
     fprintf(stderr, "  -pg <int>    gpus_per_node (default = 8)\n");
     fprintf(stderr, "  -pm <string> nccl_init_method: tcp,fs,mpi (default = mpi)\n");
-    fprintf(stderr, "  -ps <string> server_ip - used only when nccl_init_method is tcp (default = -1)\n");
+    fprintf(stderr, "  -pn <int>    num_processes (default = 1)\n");
     fprintf(stderr, "  -pp <string> fs_path - used only when nccl_init_method is fs (default = /tmp)\n");
+    fprintf(stderr, "  -pr <int>    process_rank (default = 0)\n");
+    fprintf(stderr, "  -ps <string> server_ip - used only when nccl_init_method is tcp (default = -1)\n");
     exit(EXIT_FAILURE);
 }
 
@@ -1460,6 +1493,7 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i+=2) {
         if (i + 1 >= argc) { error_usage(); } // must have arg after flag
         if (argv[i][0] != '-') { error_usage(); } // must start with dash
+        if (argv[i][1] == '-') { error_usage();}
         if (!(strlen(argv[i]) == 2 || strlen(argv[i]) == 3)) { error_usage(); } // must be -x[y] (one dash, one or two letters)
         // read in the args
         if (argv[i][1] == 'i') { train_data_pattern = argv[i+1]; }
@@ -1645,7 +1679,6 @@ int main(int argc, char *argv[]) {
     printf0("batch_size B=%d * seq_len T=%d * num_processes=%d and total_batch_size=%d\n",
             B, T, multi_gpu_config.num_processes, total_batch_size);
     printf0("=> setting grad_accum_steps=%d\n", grad_accum_steps);
-
     // set up logging
     if (multi_gpu_config.process_rank == 0) { create_dir_if_not_exists(output_log_dir); }
     Logger logger;
@@ -1654,7 +1687,6 @@ int main(int argc, char *argv[]) {
     // set up the Tokenizer
     Tokenizer tokenizer;
     tokenizer_init(&tokenizer, "chessGPT_tokenizer.bin");
-
     // set up learning rate scheduler
     LearningRateScheduler lr_scheduler;
     lr_scheduler_init(&lr_scheduler, lr_scheduler_type, learning_rate,
@@ -1667,16 +1699,21 @@ int main(int argc, char *argv[]) {
 
     // if we found a checkpoint to resume from, load the optimization state
     int step = 0;
+    printf0("This is line number: %d\n", __LINE__);
     gpt2_allocate_state(&model, B, T);
+    printf0("This is line number: %d\n", __LINE__);
     if (resuming == 1) {
+        printf0("This is line number: %d\n", __LINE__);
         snprintf(filename_buffer, sizeof(filename_buffer), "%s/state_%08d_%05d.bin", output_log_dir, resume_max_step, multi_gpu_config.process_rank);
+        printf0("This is line number: %d\n", __LINE__);
         load_state(&step, &model, &train_loader, filename_buffer);
     }
-
+    printf0("This is line number: %d\n", __LINE__);
     // init an OutlierDetector the training loss
     OutlierDetector loss_outlier_detector, grad_norm_outlier_detector;
     init_detector(&loss_outlier_detector);
     init_detector(&grad_norm_outlier_detector);
+    printf0("This is line number: %d\n", __LINE__);
 
     // do some checks here before we kick off training
     // cross-check the desired sequence length T with the model's max sequence length
@@ -1694,33 +1731,51 @@ int main(int argc, char *argv[]) {
     }
     // in any case, this must be true or we'd index beyond the model's wpe (position embedding table)
     assert(T <= model.config.max_seq_len);
+    printf0("This is line number: %d\n", __LINE__);
 
     // train
     cudaEvent_t start, end;
     cudaCheck(cudaEventCreate(&start));
     cudaCheck(cudaEventCreate(&end));
     cudaCheck(cudaProfilerStart());
+    printf0("This is line number: %d\n", __LINE__);
+
     double total_sum_iteration_time_s = 0.0;
     float ema_tokens_per_second = 0.0f;
     for (; step <= train_num_batches; step++) {
         NvtxRange step_range("Train step", step);
+        printf0("This is line number: %d\n", __LINE__);
 
         int last_step = step == train_num_batches;
+        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while estimate the validation loss (all processes collaborate)
         if (step % val_loss_every == 0 || last_step) {
+            printf0("This is line number: %d\n", __LINE__);
+            
             NvtxRange validation_range("validation");
             float val_loss = 0.0f;
+            printf0("This is line number: %d\n", __LINE__);
+
             dataloader_reset(&val_loader);
+            printf0("This is line number: %d\n", __LINE__);
+
             for (int i = 0; i < val_num_batches; i++) {
+                
+                printf0("This is line number: %d\n", __LINE__);
                 dataloader_next_batch(&val_loader);
+                
+                printf0("This is line number: %d\n", __LINE__);
                 val_loss += gpt2_validate(&model, val_loader.inputs, val_loader.targets, B, T);
+                printf0("This is line number: %d\n", __LINE__);
+
             }
             val_loss /= val_num_batches;
             val_loss = multi_gpu_cpu_float_sum(val_loss, &multi_gpu_config) / multi_gpu_config.num_processes;
             printf0("val loss %f\n", val_loss);
             logger_log_val(&logger, step, val_loss);
         }
+        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while do model inference to print generated text (only rank 0)
         if (multi_gpu_config.process_rank == 0 && sample_every > 0 &&
@@ -1768,6 +1823,7 @@ int main(int argc, char *argv[]) {
             }
             printf("\n---\n");
         }
+        printf0("This is line number: %d\n", __LINE__);
 
         // once in a while checkpoint the optimization state (all ranks)
         if ((checkpoint_every > 0 && output_log_dir != NULL && resuming == 0) &&
@@ -1785,6 +1841,7 @@ int main(int argc, char *argv[]) {
             }
         }
         resuming = 0;
+        printf0("This is line number: %d\n", __LINE__);
 
         // bit confusing: we want to make sure to eval and sample on 0th iteration
         // but also after the very last iteration. so we loop for step <= train_num_batches
