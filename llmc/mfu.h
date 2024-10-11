@@ -55,6 +55,7 @@ typedef struct {
 // the overrides for each specific GPU
 static GPUEntry gpu_db[] = {
     {"Tesla V100-SXM2-16GB", &VOLTA, 640, 1530},
+    {"Tesla V100-PCIE-16GB", &VOLTA, 640, 1530},
     {"Tesla V100-PCIE-32GB", &VOLTA, 640, 1530},
     {"NVIDIA A100-PCIE-40GB", &AMPERE_DATACENTER, 432, 1410},
     {"NVIDIA A100-PCIE-80GB", &AMPERE_DATACENTER, 432, 1410},
