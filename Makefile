@@ -202,15 +202,17 @@ else
     # Detect if running on macOS or Linux
     ifeq ($(SHELL_UNAME), Darwin)
       $(info ✗ Multi-GPU on CUDA on Darwin is not supported, skipping NCCL support)
-      
-    # else ifeq ($(shell dpkg -l | grep -q nccl && echo "exists"), exists)
-    else ifeq ($(python -c "import torch;print(torch.cuda.nccl.version())"), (2, 20, 5))
-      $(info ✓ NCCL found, OK to train with multiple GPUs)
-      NVCC_FLAGS += -DMULTI_GPU
-      NVCC_LDLIBS += -lnccl
     else
-      $(info ✗ NCCL is not found, disabling multi-GPU support)
-      $(info ---> On Linux you can try install NCCL with `sudo apt install libnccl2 libnccl-dev`)
+    # else ifeq ($(shell dpkg -l | grep -q nccl && echo "exists"), exists)
+      NCCL_VERSION=$(shell python -c "import torch; print(torch.cuda.nccl.version() if torch.cuda.is_available() else None)")
+      ifeq ($(NCCL_VERSION), (2, 20, 5))
+        $(info ✓ NCCL found, OK to train with multiple GPUs)
+        NVCC_FLAGS += -DMULTI_GPU
+        NVCC_LDLIBS += -lnccl
+      else
+        $(info ✗ NCCL is not found, disabling multi-GPU support)
+        $(info ---> On Linux you can try install NCCL with `sudo apt install libnccl2 libnccl-dev`)
+      endif
     endif
   endif
 endif
