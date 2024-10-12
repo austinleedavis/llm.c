@@ -204,8 +204,8 @@ else
       $(info ✗ Multi-GPU on CUDA on Darwin is not supported, skipping NCCL support)
     else
     # else ifeq ($(shell dpkg -l | grep -q nccl && echo "exists"), exists)
-      NCCL_VERSION=$(shell python -c "import torch; print(torch.cuda.nccl.version() if torch.cuda.is_available() else None)")
-      ifeq ($(NCCL_VERSION), (2, 20, 5))
+      NCCL_VERSION=$(shell python -c "import torch; print('exists' if torch.cuda.is_available() else None)")
+      ifeq ($(NCCL_VERSION), exists)
         $(info ✓ NCCL found, OK to train with multiple GPUs)
         NVCC_FLAGS += -DMULTI_GPU
         NVCC_LDLIBS += -lnccl
