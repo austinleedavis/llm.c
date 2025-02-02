@@ -75,7 +75,7 @@ def chessGptTokenizer() -> tiktoken.Encoding:
     One notable variation is that promotions must be in upper-case.
 
     Vocabulary:
-    Special Tokens (4): "\<|pad|\>", "\<|startoftext|\>", "\<|endoftext|\>", "\<|unknown|\>"
+    Special Tokens (4): "<|pad|>", "<|startoftext|>", "<|endoftext|>", "<|unknown|>"
     Square Tokens (64): a1 through h8
     Promote Tokens (4): Q, B, R, N
     UNUSED (8120): Need 8192-4-64-4=8120 unused tokens of the form <|unused####|>
