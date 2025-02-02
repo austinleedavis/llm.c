@@ -58,8 +58,10 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 # download the dataset
 fw = load_dataset("austindavis/lichess-uci", name=remote_name, split="train")
+print("Dataset loaded")
 
 if args.promotions_only:
+    print("Filtering Dataset")
 
     def filter_function(transcript):
         return (
@@ -70,6 +72,7 @@ if args.promotions_only:
     fw = fw.filter(
         function=filter_function, input_columns="Transcript", num_proc=os.cpu_count()
     )
+    print("Dataset filtered")
 
 
 def tokenize_gpt2(doc):
