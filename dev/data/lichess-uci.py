@@ -25,14 +25,13 @@ import os
 import datasets
 import numpy as np
 from data_common import write_datafile
-from datasets import load_dataset
+from datasets import load_dataset, get_dataset_config_names
 from tqdm import tqdm
 from uci_tokenizers import chessGptTokenizer
 
 # ------------------------------------------
 
-ds_builder = datasets.load_dataset_builder("austindavis/lichess-uci")
-lichess_months = [subset.name for subset in ds_builder.BUILDER_CONFIGS]
+lichess_months = get_dataset_config_names("austindavis/lichess-uci")
 
 supported_model_types = ["gpt-2"]
 
