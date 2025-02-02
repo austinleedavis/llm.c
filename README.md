@@ -126,7 +126,8 @@ zero_stage=1            # zero_stage, Zero Optimization Stage, 0,1,2,3 (default 
 
 
 #computed parameters
-done_file="$out_dir/DONE_$(printf "%08d" $max_steps)"
+FIRST_TRAIN_DATA_BIN=(ls $train_data_glob | head -n 1) # relative path to first training data binary file
+DONE_FILE="$out_dir/DONE_$(printf "%08d" $max_steps)" # where to save done files (unused)
 export OPENMPI_DIR=$(dirname $(dirname $(which mpirun)))
 export CUDNN_FRONTEND_PATH=$(pwd)/cudnn-frontend/include/
 export NCCL_ROOT=$(dirname $(pwd))/nccl/build/
@@ -141,7 +142,7 @@ make clean
 make train_chesscu USE_CUDNN=1
 
 # Export model weights
-python train_chess.py --model $model --input_bin $model_bin --input_val_bin $val_data_glob 
+python train_chess.py --model $model --input_bin $FIRST_TRAIN_DATA_BIN --input_val_bin $val_data_glob 
 
 mpirun -np 1 ./train_chesscu \
                 -e $model \
