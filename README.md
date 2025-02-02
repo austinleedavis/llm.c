@@ -141,7 +141,7 @@ make clean
 make train_chesscu USE_CUDNN=1
 
 # Export model weights
-python train_chess.py --model $model --input_bin $train_data_glob --input_val_bin "dev/data/$val_date-moves/*_val_*.bin"
+python train_chess.py --model $model --input_bin $train_data_glob --input_val_bin $val_data_glob 
 
 mpirun -np 1 ./train_chesscu \
                 -e $model \
