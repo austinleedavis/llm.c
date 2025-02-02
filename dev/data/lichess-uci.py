@@ -45,6 +45,8 @@ parser.add_argument("--promotions_only", action="store_true", help="Ignore games
 # fmt: on
 args = parser.parse_args()
 
+print(args)
+
 local_dir = (
     f"lichess-uci-{args.date}-moves{'-promotions_only' if args.promotions_only else ''}"
 )
