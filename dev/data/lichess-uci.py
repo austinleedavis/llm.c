@@ -71,7 +71,7 @@ if args.promotions_only:
     fw = fw.filter(
         function=filter_function, input_columns="Transcript", num_proc=os.cpu_count()
     )
-    print("Dataset filtered")
+    print(f"Dataset filtered to {len(fw)} games")
 
 
 def tokenize_gpt2(doc):
