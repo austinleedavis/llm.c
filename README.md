@@ -96,15 +96,36 @@ module load cuda/cuda-12.1.0
 # pip install nvidia-cudnn-cu12
 conda activate llmc
 
-# parameters
-depth="d12"
-train_date="202401"
-val_date="201301"
-max_steps=72000
+######################
+# Parameters
+######################
+
+# Model to train. Valid choices: ['chessGPT_d8','chessGPT_d12','d8','d12']
+model="austindavis/chessGPT_d12" 
+model_bin="chessGPT_d12_bf16.bin"
+tokernizer_bin="chessGPT_d12_tokenizer.bin"
+out_dir="log_finetune_promotions"
+train_data_glob="dev/data/lichess-uci-202302-promotions_only/202302_train_*.bin"
+val_data_glob="dev/data/lichess-uci-202302-promotions_only/202302_val_*.bin"
+max_steps=72000         # max_steps of optimization to run (-1 (default) = disable, run 1 epoch)
+log_gpu_steps=100       # log gpu info every x steps
+checkpoint_steps=100    # write optimization checkpoints every how many steps?
+max_checkpoints=1       # max number of checkpoints to keep in the directory
+resume_optimizations=1  # resume optimization found inside output log dir? (0=restart/overwrite, 1=resume/append
+per_gpu_micro_batch=40  # (per-GPU, micro) batch size B (default = 4)
+seq_len=1024            # sequence length T (default = 1024)
+generation_len=64       # genT, how many steps of inference we do (default = 64)
+sample_every=100        # sample_every, how often we inference the model (default = 20)
+val_loss_every=100      # val_loss_every, how often we evaluate val loss (default = 20)
+weight_decay=0.1        # weight decay (default = 0.0f)
+lr=0.0003               # learning rate (default = 3e-4f)
+lr_decay=1.0            # learning rate decay: final fraction at end of training (default=1.0)
+lr_warmup=700           # learning rate warmup iterations (default = 0, no warmup)
+recompute=0             # recompute: less memory but less speed. (default = 1), 0|1|2 = = none,gelu,gelu+ln 
+zero_stage=1            # zero_stage, Zero Optimization Stage, 0,1,2,3 (default = 0)
 
 
 #computed parameters
-out_dir="log_chess_gpt_$depth"
 done_file="$out_dir/DONE_$(printf "%08d" $max_steps)"
 export OPENMPI_DIR=$(dirname $(dirname $(which mpirun)))
 export CUDNN_FRONTEND_PATH=$(pwd)/cudnn-frontend/include/
@@ -120,17 +141,18 @@ make clean
 make train_chesscu USE_CUDNN=1
 
 # Export model weights
-python train_chess.py --model $depth --input_bin "dev/data/$train_date-moves/*_train_*.bin" --input_val_bin "dev/data/$val_date-moves/*_val_*.bin"
+python train_chess.py --model $model --input_bin $train_data_glob --input_val_bin "dev/data/$val_date-moves/*_val_*.bin"
 
 mpirun -np 1 ./train_chesscu \
-                -e "chessGPT_${depth}_bf16.bin" \
-                -i "dev/data/${train_date}-moves/${train_date}_*" \
-                -j "dev/data/${val_date}-moves/${val_date}_val_*.bin" \
-                -lg 100 -n 100 -nk 1 -o $out_dir -y 1 \
-                -b 40 -t 1024 \
-                -g 64 -s 100  -v 100\
-                -c 0.1 -l 0.0006 -q 0.0 -u 700 \
-                -r 0 -z 1 \
+                -e $model \
+                -i $train_data_glob \
+                -j $val_data_glob \
+                -tk $tokernizer_bin \
+                -lg $log_gpu_steps -n $checkpoint_steps -nk $max_checkpoints -o $o -y $resume_optimizations \
+                -b $per_gpu_micro_batch -t $seq_len \
+                -g $generation_len -s $sample_every -v $val_loss_every \
+                -c $weight_decay -l $lr -q $lr_decay -u $lr_warmup \
+                -r $recompute -z $zero_stage \
                 -x $max_steps 
 
 curl -H "t:Job Terminated!" -H "ta:Job" -H "p:5" -d "Job ended!" ntfy.sh/awesomesauceisinteresting
@@ -154,8 +176,24 @@ Build a very small sample of the dataset (takes ~1 minute):
 python dev/data/lichess-uci.py --date 201301 --promotions_only
 ```
 
+```bash
+make clean
+make train_chesscu USE_CUDNN=1
 
+# Export model weights
+python train_chess.py --model $depth --input_bin "dev/data/$train_date-moves/*_train_*.bin" --input_val_bin "dev/data/$val_date-moves/*_val_*.bin"
 
+./train_chesscu \
+                -e "chessGPT_${depth}_bf16.bin" \
+                -i "dev/data/lichess-uci-${train_date}-moves/${train_date}_*" \
+                -j "dev/data/${val_date}-moves/${val_date}_val_*.bin" \
+                -lg 100 -n 100 -nk 1 -o $out_dir -y 1 \
+                -b 40 -t 1024 \
+                -g 64 -s 100  -v 100\
+                -c 0.1 -l 0.0006 -q 0.0 -u 700 \
+                -r 0 -z 1 \
+                -x $max_steps 
+```
 
 
 # llm.c
