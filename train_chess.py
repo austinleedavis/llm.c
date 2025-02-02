@@ -338,7 +338,7 @@ def _peek_data_shard(filename):
         # first read the header, which is 256 int32 integers (4 bytes each)
         header = np.frombuffer(f.read(256 * 4), dtype=np.int32)
     if header[0] != 20240520:
-        print("ERROR: magic number mismatch in the data .bin file!")
+        print(f"ERROR: magic number ({header[0]}!=20240520) mismatch in the data .bin file!")
         print("---> HINT: Are you passing in a correct file with --input_bin?")
         print("---> HINT: Dataset encoding changed recently, re-run data prepro or refer again to README")
         print("---> HINT: For example re-run: `python dev/data/lichess-uci.py`, then re-try")

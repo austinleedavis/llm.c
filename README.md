@@ -106,7 +106,7 @@ model_bin="chessGPT_d12_bf16.bin"
 tokernizer_bin="chessGPT_d12_tokenizer.bin"
 out_dir="log_finetune_promotions"
 train_data_glob="dev/data/lichess-uci-202302-promotions_only/202302_train_*.bin"
-val_data_glob="dev/data/lichess-uci-202302-promotions_only/202302_val_*.bin"
+val_data_glob="dev/data/lichess-uci-202302-promotions_only/202302_val_000000.bin"
 max_steps=72000         # max_steps of optimization to run (-1 (default) = disable, run 1 epoch)
 log_gpu_steps=100       # log gpu info every x steps
 checkpoint_steps=100    # write optimization checkpoints every how many steps?
@@ -141,7 +141,7 @@ make clean
 make train_chesscu USE_CUDNN=1
 
 # Export model weights
-python train_chess.py --model $model --input_bin $train_data_glob --input_val_bin $val_data_glob 
+python train_chess.py --model $model --input_bin $model_bin --input_val_bin $val_data_glob 
 
 mpirun -np 1 ./train_chesscu \
                 -e $model \
