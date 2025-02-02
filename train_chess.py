@@ -207,7 +207,11 @@ class GPT(nn.Module):
         sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
 
         # init a huggingface/transformers model
-        model_hf = GPT2LMHeadModel.from_pretrained('austindavis/'+model_type)
+        hf_model_name = {
+            'chessGPT_d8':         "chess-gpt2-uci-8x8x512",  
+            'chessGPT_d12':        "chess-gpt2-uci-12x12x768",
+        }[model_type]
+        model_hf = GPT2LMHeadModel.from_pretrained('austindavis/'+hf_model_name)
         sd_hf = model_hf.state_dict()
 
         # copy while ensuring all of the parameters are aligned and match in names and shapes
@@ -221,14 +225,23 @@ class GPT(nn.Module):
         for k in sd_keys_hf:
             if any(k.endswith(w) for w in transposed):
                 # special treatment for the Conv1D weights we need to transpose
-                assert sd_hf[k].shape[::-1] == sd[k].shape
+                assert sd_hf[k].shape[::-1] == sd[k].shape, f"{sd_hf[k].shape[::-1]=} is not {sd[k].shape}"
                 with torch.no_grad():
                     sd[k].copy_(sd_hf[k].t())
             else:
-                # vanilla copy over the other parameters
-                assert sd_hf[k].shape == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k])
+                # the llm.c library has a min vocab of 8192 and I use maxlen 1024. 
+                # So, we must pad the following matrices from the trained chessGPT model:
+                if k in [
+                    "transformer.wte.weight",  # [d_context, d_model]
+                    "transformer.wpe.weight",  # [d_context, d_model]
+                    "lm_head.weight",          # [d_vocab, d_model]
+                ]:
+                    sd[: sd_hf[k].shape[0], :] = sd_hf
+                else:
+                    # vanilla copy over the other parameters
+                    assert sd_hf[k].shape == sd[k].shape, f"{k=} {sd_hf[k].shape=}"
+                    with torch.no_grad():
+                        sd[k].copy_(sd_hf[k])
 
         return model
 

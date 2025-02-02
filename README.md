@@ -1,3 +1,163 @@
+# Getting Started
+
+## Newton/Stokes clusters
+
+Begin by setting up the compute environment using the following:
+
+```bash
+#Setup Conda Environment
+conda activate mambaa
+mamba create --name llmc python=3.12.2 conda-libmamba-solver
+conda deactivate
+conda activate llmc
+conda config --set solver libmamba
+
+# execute the following from the llm.c directory
+module load openmpi/openmpi-4.1.5-gcc-12.2.0
+module load cuda/cuda-12.1.0
+conda activate llmc
+pip install -r requirements.txt
+git clone https://github.com/NVIDIA/cudnn-frontend.git
+
+# I had to build NCCL from source
+# execute the following in ~/git/:
+cd ~/git
+git clone https://github.com/NVIDIA/nccl.git
+cd ~/git/nccl
+make src.build CUDA_HOME=$CUDA_HOME
+
+```
+
+Build a very small sample of the dataset on stokes (takes ~1 minute):
+```bash
+module load anaconda/anaconda-2023.09
+conda activate llmc
+python dev/data/lichess-uci.py --date 201301
+```
+
+This dataset is encoded as 16-bit unsigned integers. You can view the raw encoded token indices using the following:
+```bash
+head -n 50 202401_val_000000.bin | od -An -t u2 -w2 | tr -s '[:space:]' ' '
+```
+
+Tokenize the 202401-moves (13.3B token) dataset. This took 5hr 24 min on a 48-core CPU and required 25G to store the sharded data. The data is split into 133 shards for training plus a single validation shard:
+```bash
+module load anaconda/anaconda-2023.09
+conda activate llmc
+python dev/data/lichess_uci.py --date 202401
+```
+
+Now we can train ChessGPT. I allocated the 4 nodes each with 2xH100s using the following:
+Single-node:
+```bash
+salloc --job-name=llmc-multinode \
+        --nodes=1 \
+        --ntasks=2 \
+        --ntasks-per-node=2 \
+        --gres=gpu:2 \
+        --time=00:10:00
+        --exclusive \
+        --constraint=v100 \
+```
+Multi-node:
+```bash
+salloc --job-name=llmc-multinode \
+        --nodes=4 \
+        --ntasks=8 \
+        --ntasks-per-node=2 \
+        --gres=gpu:2 \
+        --constraint=v100 \
+        --exclusive \
+        --time=04:00:00
+```
+
+
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=llmc-multinode
+#SBATCH --output=slurm/%x_%j_%t.log
+#SBATCH --error=slurm/%x_%j_%t.err
+#SBATCH --nodes=1
+#SBATCH --ntasks=2
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:2
+#SBATCH --constraint=v100
+#SBATCH --exclusive
+#SBATCH --time=04:00:00
+curl -H "t:Job Running!" -H "ta:Job" -H "p:5" -d "Job is now running!" ntfy.sh/awesomesauceisinteresting
+
+# module load anaconda/anaconda-2023.09
+module load openmpi/openmpi-4.1.5-gcc-12.2.0 
+module load cuda/cuda-12.1.0 
+# only run this one time:
+# source /apps/anaconda/anaconda3/etc/profile.d/conda.sh
+# conda activate base
+# pip install nvidia-cudnn-cu12
+conda activate llmc
+
+# parameters
+depth="d12"
+train_date="202401"
+val_date="201301"
+max_steps=72000
+
+
+#computed parameters
+out_dir="log_chess_gpt_$depth"
+done_file="$out_dir/DONE_$(printf "%08d" $max_steps)"
+export OPENMPI_DIR=$(dirname $(dirname $(which mpirun)))
+export CUDNN_FRONTEND_PATH=$(pwd)/cudnn-frontend/include/
+export NCCL_ROOT=$(dirname $(pwd))/nccl/build/
+export CPLUS_INCLUDE_PATH=$NCCL_ROOT/include:$CPLUS_INCLUDE_PATH
+export LIBRARY_PATH=$NCCL_ROOT/lib:$LIBRARY_PATH
+export LD_LIBRARY_PATH=$NCCL_ROOT/lib:$LD_LIBRARY_PATH
+
+nvidia-smi
+
+# Make
+make clean
+make train_chesscu USE_CUDNN=1
+
+# Export model weights
+python train_chess.py --model $depth --input_bin "dev/data/$train_date-moves/*_train_*.bin" --input_val_bin "dev/data/$val_date-moves/*_val_*.bin"
+
+mpirun -np 1 ./train_chesscu \
+                -e "chessGPT_${depth}_bf16.bin" \
+                -i "dev/data/${train_date}-moves/${train_date}_*" \
+                -j "dev/data/${val_date}-moves/${val_date}_val_*.bin" \
+                -lg 100 -n 100 -nk 1 -o $out_dir -y 1 \
+                -b 40 -t 1024 \
+                -g 64 -s 100  -v 100\
+                -c 0.1 -l 0.0006 -q 0.0 -u 700 \
+                -r 0 -z 1 \
+                -x $max_steps 
+
+curl -H "t:Job Terminated!" -H "ta:Job" -H "p:5" -d "Job ended!" ntfy.sh/awesomesauceisinteresting
+
+```
+
+
+
+## Local Machine
+
+Setup is simpler on a local machine:
+
+```bash
+conda env create -f environment.yml
+conda activate llmc
+```
+
+
+Build a very small sample of the dataset (takes ~1 minute):
+```bash
+python dev/data/lichess-uci.py --date 201301 --promotions_only
+```
+
+
+
+
+
 # llm.c
 
 LLMs in simple, pure C/CUDA with no need for 245MB of PyTorch or 107MB of cPython. Current focus is on pretraining, in particular reproducing the [GPT-2](https://github.com/openai/gpt-2) and [GPT-3](https://arxiv.org/abs/2005.14165) miniseries, along with a parallel PyTorch reference implementation in [train_gpt2.py](train_gpt2.py). You'll recognize this file as a slightly tweaked [nanoGPT](https://github.com/karpathy/nanoGPT), an earlier project of mine. Currently, llm.c is a bit faster than PyTorch Nightly (by about 7%). In addition to the bleeding edge mainline code in [train_gpt2.cu](train_gpt2.cu), we have a simple reference CPU fp32 implementation in ~1,000 lines of clean code in one file [train_gpt2.c](train_gpt2.c). I'd like this repo to only maintain C and CUDA code. Ports to other languages or repos are very welcome, but should be done in separate repos, and I am happy to link to them below in the "notable forks" section. Developer coordination happens in the [Discussions](https://github.com/karpathy/llm.c/discussions) and on Discord, either the `#llmc` channel on the [Zero to Hero](https://discord.gg/3zy8kqD9Cp) channel, or on `#llmdotc` on CUDA MODE Discord.

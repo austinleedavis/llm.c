@@ -1,6 +1,10 @@
 """
 Script to convert GPT2 models from llm.c binary format to Hugging Face
 
+**Note**: requires accelerate, ninja, and flash-attn 
+Install both with:
+    pip install accelerate>=0.26.0 ninja flash-attn --no-build-isolation
+
 It can optinally upload to your account on Hugging Face if you have the CLI:
   pip install -U "huggingface_hub[cli]"
   huggingface-cli login
@@ -12,10 +16,12 @@ Export to a local HF model and also push to your account on Hugging Face:
   python export_hf.py --input input_file.bin --output output_dir --push true
 """
 
+import argparse
+import sys
+
 import numpy as np
 import torch
-import argparse, sys
-from transformers import GPT2Config, GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
 
 # -----------------------------------------------------------------------------
 # Tensor functions for both bfloat16 (from int16) and normal float32
@@ -88,7 +94,7 @@ def convert(filepath, output, push_to_hub=False, out_dtype="bfloat16"):
         data = np.frombuffer(f.read(num_elements * np.dtype(dtype).itemsize), dtype=dtype)
         w[key] = data.reshape(shape)
         # The binary file saves the padded vocab - drop the padding back to GPT2 size
-        if shape[0] == Vp:
+        if shape[0] == Vp and V != Vp:
             w[key] = w[key].reshape(shape)[:(V-Vp), :]
     # Ensure the file is fully read and then close
     assert f.read() == b''
