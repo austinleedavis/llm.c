@@ -47,9 +47,9 @@ args = parser.parse_args()
 print(args)
 
 local_dir = (
-    f"lichess-uci-{args.date}-moves{'-promotions_only' if args.promotions_only else ''}"
+    f"lichess-uci-{args.date}{'-promotions_only' if args.promotions_only else ''}"
 )
-remote_name = args.date + "-moves"
+remote_name = args.date
 
 # create the cache the local directory if it doesn't exist yet
 DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
