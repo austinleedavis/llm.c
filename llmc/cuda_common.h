@@ -98,7 +98,7 @@ typedef __nv_bfloat16 floatX;
 // our own versions if none already exist, otherwise the compiler will complain.
 // If not, you easily get "no viable overload" (for sm52) and "function already exists" (sm_80)
 
-#if defined(ENABLE_BF16) && (__CUDACC_VER_MAJOR__ < 12) && !((__CUDA_ARCH__ >= 800) || !defined(__CUDA_ARCH__))
+// #if defined(ENABLE_BF16) && (__CUDACC_VER_MAJOR__ < 12) && !((__CUDA_ARCH__ >= 800) || !defined(__CUDA_ARCH__))
 __device__ floatX __ldcs(const floatX* address) {
     unsigned short bf = __ldcs(reinterpret_cast<const unsigned short*>(address));
     return __nv_bfloat16_raw{bf};
@@ -107,7 +107,7 @@ __device__ floatX __ldcs(const floatX* address) {
 __device__ void __stcs(floatX* address, floatX value) {
     __stcs(reinterpret_cast<unsigned short*>(address), ((__nv_bfloat16_raw)value).x);
 }
-#endif
+// #endif
 
 // ----------------------------------------------------------------------------
 // Profiler utils
