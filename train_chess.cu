@@ -1434,6 +1434,7 @@ int main(int argc, char *argv[]) {
     const char* load_filename = "chessGPT_d12_bf16.bin"; // bf16 weights of the model
     const char* lr_scheduler_type = "cosine";
     const char* output_log_dir = "log_chess_gpt";
+    const char* tokenizer_filename = "chessGPT_d12_tokenizer.bin";
     int checkpoint_every = 0; // write checkpoints every how many steps?
     int checkpoints_keep = 0; // how long checkpoint history do we keep? (in units of checkpoints)
     int major_checkpoint_every = 0; // major checkpoints never get deleted when maintaining history
@@ -1510,7 +1511,7 @@ int main(int argc, char *argv[]) {
         else if (argv[i][1] == 's' && argv[i][2] == 'g') { skip_update_gradz = atof(argv[i+1]); }
         else if (argv[i][1] == 'n' && argv[i][2] == 'k') { checkpoints_keep = atoi(argv[i+1]); }
         else if (argv[i][1] == 'n' && argv[i][2] == 'm') { major_checkpoint_every = atoi(argv[i+1]); }
-        else if (argv[i][1] == 't' && argv[i][2] == 'k') { strcpy(tokenizer_filename = argv[i+1]); }
+        else if (argv[i][1] == 't' && argv[i][2] == 'k') { tokenizer_filename = argv[i+1]; }
         else { error_usage(); }
     }
 
